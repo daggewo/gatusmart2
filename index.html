@@ -7,11 +7,6 @@
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-
-<!-- Awesomplete CSS & JS -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js"></script>
-
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 #map { position:absolute; top:0; bottom:0; width:100%; }
@@ -42,36 +37,63 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   left:0; 
   width:100%; 
   display:flex; 
-  justify-content:center; 
+  flex-direction: column;
   gap:10px;
   z-index:10; 
-  padding:15px;
+  padding:10px 10px 20px 10px;
   box-sizing: border-box;
-  flex-wrap: wrap;
+  background: rgba(0,0,0,0.5);
 }
 
-#street-input {
-  font-size:16px;
-  padding:10px;
-  border-radius:5px;
-  border:2px solid white;
-  background: rgba(0,0,0,0.9);
-  color:white;
-  flex: 1 1 60%;
+#letters {
+  display:flex; 
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:5px;
 }
+
+.letter-btn {
+  background: rgba(255,255,255,0.2);
+  color:white;
+  border:none;
+  padding:8px 12px;
+  border-radius:5px;
+  font-size:16px;
+  cursor:pointer;
+}
+
+.letter-btn.selected { background: white; color:black; }
+
+#street-list {
+  display:flex; 
+  overflow-x:auto; 
+  gap:8px; 
+  padding:5px 0;
+}
+
+.street-btn {
+  background: rgba(255,255,255,0.2);
+  color:white;
+  border:none;
+  padding:8px 12px;
+  border-radius:5px;
+  font-size:16px;
+  cursor:pointer;
+  white-space: nowrap;
+}
+
+.street-btn:hover { background: rgba(255,255,255,0.4); }
 
 #pass-btn {
-  font-size:16px;
-  padding:10px 20px;
-  border-radius:5px;
-  border:2px solid white;
-  background: rgba(0,0,0,0.9);
+  background: rgba(255,0,0,0.6);
   color:white;
+  border:none;
+  padding:10px;
+  font-size:16px;
+  border-radius:5px;
   cursor:pointer;
-  flex: 1 1 30%;
+  margin-top:5px;
 }
-
-#pass-btn:hover, #street-input:focus { background: rgba(0,0,0,1); outline:none; }
 
 #message-box {
   position:absolute;
@@ -104,7 +126,8 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 </div>
 
 <div id="quiz">
-  <input type="text" id="street-input" placeholder="Skriv gatan..." autocomplete="off">
+  <div id="letters"></div>
+  <div id="street-list"></div>
   <button id="pass-btn">Passa</button>
 </div>
 
@@ -139,10 +162,9 @@ const progressDiv=document.getElementById('progress');
 const livesDiv=document.getElementById('lives');
 const recordDiv=document.getElementById('record');
 const messageBox=document.getElementById('message-box');
-const streetInput = document.getElementById('street-input');
+const lettersDiv=document.getElementById('letters');
+const streetListDiv=document.getElementById('street-list');
 const passBtn = document.getElementById('pass-btn');
-
-let awesompleteInstance = null;
 
 function updateHUD(){ 
   progressDiv.textContent=`Street ${currentStreetIndex+1} / ${allStreets?allStreets.length:0}`; 
@@ -214,37 +236,38 @@ async function initializeArea(polygon){
     map.addLayer({id:'answered-wrong',type:'line',source:'answered-streets',filter:['==',['get','status'],'wrong'],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'red','line-width':6}});
   }
 
+  createLetterButtons();
   updateHUD();
   nextRound();
 }
 
-// Start på Södermalm
-async function initGame() {
-  try {
-    const polygon = await fetchPolygon('Södermalm');
-    currentPolygon = polygon;
-    if(!mapReady){ 
-      map.on('load',()=>initializeArea(polygon)); 
-    } else { 
-      initializeArea(polygon); 
-    }
-  } catch(e) { 
-    alert('Error fetching area: '+e.message); 
-  }
-}
-initGame();
-
-function updateSuggestions() {
-  if(!allStreets) return;
-  const streetNames = allStreets.filter(s => !usedStreets.has(s.name)).map(s => s.name);
-  if(!awesompleteInstance){
-    awesompleteInstance = new Awesomplete(streetInput, { list: streetNames, minChars: 1, autoFirst: true });
-    streetInput.addEventListener('awesomplete-selectcomplete', (e) => {
-      checkAnswer(e.text.value);
+function createLetterButtons(){
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  lettersDiv.innerHTML = '';
+  letters.forEach(letter=>{
+    const btn = document.createElement('button');
+    btn.className='letter-btn';
+    btn.textContent = letter;
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.letter-btn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      populateStreetList(letter);
     });
-  } else {
-    awesompleteInstance.list = streetNames;
-  }
+    lettersDiv.appendChild(btn);
+  });
+}
+
+function populateStreetList(letter){
+  streetListDiv.innerHTML='';
+  if(!allStreets) return;
+  const filtered = allStreets.filter(s => !usedStreets.has(s.name) && s.name[0].toUpperCase() === letter);
+  filtered.forEach(s=>{
+    const btn = document.createElement('button');
+    btn.className='street-btn';
+    btn.textContent = s.name;
+    btn.addEventListener('click', ()=>{ checkAnswer(s.name); });
+    streetListDiv.appendChild(btn);
+  });
 }
 
 function nextRound(){
@@ -266,9 +289,13 @@ function nextRound(){
     highlightSourceAdded=true; 
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
-  streetInput.value='';
-  streetInput.focus();
-  updateSuggestions();
+  // Automatically select first letter of street
+  const firstLetter = currentStreet.name[0].toUpperCase();
+  document.querySelectorAll('.letter-btn').forEach(b=>{
+    b.classList.toggle('selected', b.textContent === firstLetter);
+  });
+  populateStreetList(firstLetter);
+
   updateHUD();
 }
 
@@ -287,7 +314,7 @@ function checkAnswer(answer){
   }
   usedStreets.add(currentStreet.name);
   updateHUD();
-  setTimeout(nextRound,1000);
+  setTimeout(nextRound,500);
 }
 
 // Passa-knapp
@@ -296,6 +323,22 @@ passBtn.addEventListener('click', ()=>{
   usedStreets.add(currentStreet.name);
   nextRound();
 });
+
+// Init game
+async function initGame() {
+  try {
+    const polygon = await fetchPolygon('Södermalm');
+    currentPolygon = polygon;
+    if(!mapReady){ 
+      map.on('load',()=>initializeArea(polygon)); 
+    } else { 
+      initializeArea(polygon); 
+    }
+  } catch(e) { 
+    alert('Error fetching area: '+e.message); 
+  }
+}
+initGame();
 </script>
 </body>
 </html>
