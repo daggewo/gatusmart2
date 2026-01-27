@@ -15,16 +15,16 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 /* HUD */
 #hud {
   position:absolute;
-  top:10px;
+  top:6px;
   left:50%;
   transform:translateX(-50%);
   display:flex;
-  gap:10px;
+  gap:6px;
   color:white;
-  font-size:16px;
+  font-size:14px;
   font-weight:bold;
   z-index:10;
-  padding:10px 20px;
+  padding:4px 12px;
   width:90%;
   max-width:700px;
   justify-content: space-between;
@@ -40,33 +40,33 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   width:100%;
   display:flex;
   flex-direction: column;
-  gap:8px;
+  gap:2px; /* reduced */
   z-index:10;
-  padding:10px;
+  padding:4px; /* reduced */
   box-sizing:border-box;
-  background: rgba(0,0,0,0.8);
+  background: rgba(0,0,0,0.85);
 }
 
 /* Bottom row */
 #bottom-row {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:2px; /* reduced */
   justify-content:center;
   flex-wrap:nowrap;
   overflow-x:auto;
-  padding-bottom:12px;
+  padding-bottom:4px; /* reduced */
 }
 
 #typed-row {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:4px;
 }
 
 #prefix-display {
   color:white;
-  font-size:22px;
+  font-size:16px; /* slightly smaller */
   font-weight:bold;
 }
 
@@ -75,10 +75,10 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   background:#900;
   color:#fff;
   border:none;
-  padding:10px 18px;
-  font-size:16px;
+  padding:4px 10px; /* smaller */
+  font-size:13px; /* smaller */
   font-weight:bold;
-  border-radius:10px;
+  border-radius:6px;
   cursor:pointer;
 }
 #pass-btn.hidden { display:none; }
@@ -87,7 +87,7 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 /* Alternatives */
 #street-list {
   display:flex;
-  gap:8px;
+  gap:4px; /* reduced */
   flex-wrap: nowrap;
   overflow-x: auto;
 }
@@ -96,9 +96,9 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   background:#111;
   color:white;
   border:1px solid #888;
-  padding:12px 18px;
-  border-radius:14px;
-  font-size:18px;
+  padding:6px 10px; /* smaller */
+  border-radius:10px;
+  font-size:14px; /* smaller */
   font-weight:600;
   cursor:pointer;
   white-space:nowrap;
@@ -109,10 +109,10 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 #letters {
   display:flex;
   flex-direction: column;
-  gap:5px;
+  gap:2px; /* reduced */
   width:100%;
   box-sizing:border-box;
-  padding:0 12px 22px;
+  padding:0 6px 8px; /* reduced */
 }
 
 .letter-row {
@@ -128,7 +128,7 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   color:white;
   border:none;
   border-radius:5px;
-  font-size:18px;
+  font-size:16px;
   cursor:pointer;
   aspect-ratio:1;
   display:flex;
@@ -148,12 +148,12 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   top:50%;
   left:50%;
   transform: translate(-50%,-50%);
-  min-width:180px;
-  padding:15px 20px;
+  min-width:140px;
+  padding:10px 14px;
   text-align:center;
-  font-size:22px;
+  font-size:18px;
   font-weight:bold;
-  border-radius:12px;
+  border-radius:8px;
   z-index:20;
   display:none;
 }
@@ -219,19 +219,16 @@ const passBtn=document.getElementById('pass-btn');
 
 let currentPrefix = "";
 
-/* PASS button triggers wrong answer */
 passBtn.addEventListener('click',()=>{
   if(!currentStreet) return;
   checkAnswer('__PASS__');
 });
 
-/* Keyboard layout */
 const qwertyRows = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L','Å'],
   ['Z','X','C','V','B','N','M','Ä','Ö','⌫']
 ];
-
 let letterButtons=[];
 
 function createLetterButtons(){
@@ -309,7 +306,7 @@ function showMessageBox(text, correct=true){
   messageBox.textContent = text;
   messageBox.className = correct ? 'correct' : 'wrong';
   messageBox.style.display='block';
-  setTimeout(()=>{ messageBox.style.display='none'; },3000);
+  setTimeout(()=>{ messageBox.style.display='none'; },2000);
 }
 
 function pickRandom(arr,n){
@@ -327,18 +324,14 @@ function highlightStreet(geojson,status){
   if(!map.getSource('answered-streets')) return;
   const answeredSource=map.getSource('answered-streets'); 
   const existing=answeredSource._data.features.filter(
-    f=>!geojson.features.some(
-      cf=>cf.geometry.coordinates[0][0]===f.geometry.coordinates[0][0]
-    )
+    f=>!geojson.features.some(cf=>cf.geometry.coordinates[0][0]===f.geometry.coordinates[0][0])
   ); 
   answeredSource.setData(turf.featureCollection([...existing,...geojson.features])); 
 }
 
-/* Fetch polygon & streets */
+// Fetch polygon & streets
 async function fetchPolygon(areaName){ 
-  const res=await fetch(
-    `https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`
-  ); 
+  const res=await fetch(`https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`); 
   const data=await res.json(); 
   if(!data.length) throw new Error("No polygon found"); 
   return data[0].geojson; 
@@ -353,11 +346,7 @@ async function fetchStreets(polygon){
   const query=`[out:json][timeout:200];
     (way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"]
     (${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out geom;`;
-  const resOSM=await fetch('https://overpass-api.de/api/interpreter',{
-    method:'POST',
-    body:query,
-    headers:{'Content-Type':'application/x-www-form-urlencoded'}
-  });
+  const resOSM=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:query,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
   const dataOSM=await resOSM.json();
   const streetsByName={};
   dataOSM.elements.filter(el=>el.tags && el.tags.name).forEach(el=>{
@@ -369,7 +358,7 @@ async function fetchStreets(polygon){
   return Object.keys(streetsByName).map(name=>({name,geometries:streetsByName[name]}));
 }
 
-/* Initialize area & game */
+// Initialize area and game
 async function initializeArea(polygon){
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
@@ -396,7 +385,7 @@ async function initializeArea(polygon){
   updateHUD();
 }
 
-/* Start next round */
+// Next round
 function nextRound(){
   currentPrefix="";
   prefixDisplay.textContent="";
@@ -411,29 +400,18 @@ function nextRound(){
 
   currentStreet = pickRandom(remainingStreets,1)[0];
   currentGeoJSON = turf.featureCollection(
-    currentStreet.geometries.map(geom=>({
-      type:'Feature',
-      geometry:{type:'LineString',coordinates:geom},
-      properties:{}
-    }))
+    currentStreet.geometries.map(geom=>({type:'Feature',geometry:{type:'LineString',coordinates:geom},properties:{}}))
   );
 
   const streetCoords=currentGeoJSON.features.flatMap(f=>f.geometry.coordinates);
   const lats=streetCoords.map(c=>c[1]), lngs=streetCoords.map(c=>c[0]);
-  const streetBounds=[
-    [Math.min(...lngs)-0.001,Math.min(...lats)-0.001],
-    [Math.max(...lngs)+0.001,Math.max(...lats)+0.001]
-  ];
+  const streetBounds=[[Math.min(...lngs)-0.001,Math.min(...lats)-0.001],[Math.max(...lngs)+0.001,Math.max(...lats)+0.001]];
   map.fitBounds(streetBounds,{padding:120,maxZoom:15,duration:1000,essential:true});
 
   if(!highlightSourceAdded){
     map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON});
-    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,
-      layout:{'line-join':'round','line-cap':'round'},
-      paint:{'line-color':'black','line-width':10}});
-    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,
-      layout:{'line-join':'round','line-cap':'round'},
-      paint:{'line-color':'white','line-width':6}});
+    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'black','line-width':10}});
+    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'white','line-width':6}});
     highlightSourceAdded=true;
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
@@ -442,57 +420,48 @@ function nextRound(){
   updateHUD();
 }
 
-/* Check answer */
+// Check answer
 function checkAnswer(answer){
   if(!currentStreet) return;
-
-  const isCorrect =
-    answer !== '__PASS__' &&
-    answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
-
+  const isCorrect = answer !== '__PASS__' && answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
   highlightStreet(currentGeoJSON, isCorrect?'correct':'wrong');
 
+  // Increase street index regardless of correctness
+  currentStreetIndex++;
+  updateHUD();
+
   if(isCorrect){
-    currentStreetIndex++;
     record=Math.max(record,currentStreetIndex);
     localStorage.setItem('stockholmStreetRecord',record);
     showMessageBox('Rätt!', true);
   } else {
     lives--;
     showMessageBox(currentStreet.name, false);
-    if(lives===0){
-      setTimeout(resetGame,3000);
-      return;
-    }
+    if(lives===0){ setTimeout(resetGame,3000); return; }
   }
 
   usedStreets.add(currentStreet.name);
-  updateHUD();
-  setTimeout(nextRound,3000);
+  setTimeout(nextRound,2000);
 }
 
-/* Reset game */
+// Reset
 function resetGame(){ 
   lives=3;
   currentStreetIndex=0;
   usedStreets.clear(); 
-  if(map.getSource('answered-streets'))
-    map.getSource('answered-streets').setData(turf.featureCollection([])); 
+  if(map.getSource('answered-streets')) map.getSource('answered-streets').setData(turf.featureCollection([])); 
   nextRound(); 
   updateHUD(); 
 }
 
-/* Initialize game */
+// Start
 async function initGame(){
   try{
     const polygon = await fetchPolygon('Södermalm');
     currentPolygon=polygon;
-    if(!mapReady){
-      map.on('load',()=>initializeArea(polygon));
-    } else initializeArea(polygon);
-  }catch(e){
-    alert('Error fetching area: '+e.message);
-  }
+    if(!mapReady){ map.on('load',()=>initializeArea(polygon)); }
+    else initializeArea(polygon);
+  }catch(e){ alert('Error fetching area: '+e.message); }
 }
 initGame();
 </script>
