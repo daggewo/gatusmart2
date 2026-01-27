@@ -7,6 +7,11 @@
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+<!-- Awesomplete CSS & JS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js"></script>
+
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 #map { position:absolute; top:0; bottom:0; width:100%; }
@@ -99,9 +104,8 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 </div>
 
 <div id="quiz">
-  <input type="text" id="street-input" placeholder="Skriv gatan..." list="street-suggestions" autocomplete="off">
+  <input type="text" id="street-input" placeholder="Skriv gatan..." autocomplete="off">
   <button id="pass-btn">Passa</button>
-  <datalist id="street-suggestions"></datalist>
 </div>
 
 <div id="message-box"><span class="text">Game Over</span><span class="rekord">Rekord: 0</span></div>
@@ -129,7 +133,6 @@ let lives=3;
 let currentStreet=null;
 let currentGeoJSON=null;
 
-// Load record
 let record = Number(localStorage.getItem('stockholmStreetRecord')) || 0;
 
 const progressDiv=document.getElementById('progress');
@@ -137,8 +140,9 @@ const livesDiv=document.getElementById('lives');
 const recordDiv=document.getElementById('record');
 const messageBox=document.getElementById('message-box');
 const streetInput = document.getElementById('street-input');
-const streetSuggestions = document.getElementById('street-suggestions');
 const passBtn = document.getElementById('pass-btn');
+
+let awesompleteInstance = null;
 
 function updateHUD(){ 
   progressDiv.textContent=`Street ${currentStreetIndex+1} / ${allStreets?allStreets.length:0}`; 
@@ -231,12 +235,16 @@ async function initGame() {
 initGame();
 
 function updateSuggestions() {
-  streetSuggestions.innerHTML = '';
-  allStreets.filter(s => !usedStreets.has(s.name)).forEach(s => {
-    const option = document.createElement('option');
-    option.value = s.name;
-    streetSuggestions.appendChild(option);
-  });
+  if(!allStreets) return;
+  const streetNames = allStreets.filter(s => !usedStreets.has(s.name)).map(s => s.name);
+  if(!awesompleteInstance){
+    awesompleteInstance = new Awesomplete(streetInput, { list: streetNames, minChars: 1, autoFirst: true });
+    streetInput.addEventListener('awesomplete-selectcomplete', (e) => {
+      checkAnswer(e.text.value);
+    });
+  } else {
+    awesompleteInstance.list = streetNames;
+  }
 }
 
 function nextRound(){
@@ -282,24 +290,12 @@ function checkAnswer(answer){
   setTimeout(nextRound,1000);
 }
 
-// Lyssna på input → om matchar kvarvarande gator trigga direkt
-streetInput.addEventListener('input', () => {
-  if(!currentStreet) return;
-  const val = streetInput.value.trim();
-  if(!val) return;
-  const matchedStreet = allStreets.find(s => !usedStreets.has(s.name) && s.name.toLowerCase() === val.toLowerCase());
-  if(matchedStreet){
-    checkAnswer(matchedStreet.name);
-  }
-});
-
 // Passa-knapp
 passBtn.addEventListener('click', ()=>{
   highlightStreet(currentGeoJSON,'wrong');
   usedStreets.add(currentStreet.name);
   nextRound();
 });
-
 </script>
 </body>
 </html>
