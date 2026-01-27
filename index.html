@@ -37,46 +37,41 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   width:100%;
   display:flex;
   flex-direction: column;
-  justify-content: flex-end;
   gap:8px;
   z-index:10;
   padding:10px;
-  box-sizing: border-box;
+  box-sizing:border-box;
   background: rgba(0,0,0,0.5);
+}
+
+/* Row above keyboard: typed word + alternatives */
+#bottom-row {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+  overflow-x:auto;
 }
 
 #typed-row {
   display:flex;
-  justify-content:center;
   align-items:center;
   gap:8px;
+  flex-shrink:0;
 }
 
 #prefix-display { color:white; font-size:20px; font-weight:bold; }
 #backspace-btn { display:none; background: rgba(255,255,255,0.2); color:white; border:none; padding:8px 12px; border-radius:5px; font-size:16px; cursor:pointer; }
 
-#letters { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; }
-
-.letter-row { display:flex; justify-content:center; gap:5px; width:100%; }
-.letter-btn {
-  background: rgba(255,255,255,0.2);
-  color:white;
-  border:none;
-  padding:8px 12px;
-  border-radius:5px;
-  font-size:16px;
-  cursor:pointer;
-}
-.letter-btn.disabled { background: rgba(100,100,100,0.2); color: rgba(200,200,200,0.5); cursor:not-allowed; }
-
 #street-list {
   display:flex;
-  justify-content:center;
   align-items:center;
-  overflow-x:auto;
   gap:8px;
-  padding:8px 0;
+  flex-wrap:nowrap;
+  overflow-x:auto;
 }
+
 .street-btn {
   background: rgba(255,255,255,0.2);
   color:white;
@@ -88,6 +83,20 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   white-space: nowrap;
 }
 .street-btn:hover { background: rgba(255,255,255,0.4); }
+
+#letters { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; max-width: 100%; }
+
+.letter-row { display:flex; justify-content:center; gap:5px; flex-wrap: nowrap; width:100%; }
+.letter-btn {
+  background: rgba(255,255,255,0.2);
+  color:white;
+  border:none;
+  padding:8px 12px;
+  border-radius:5px;
+  font-size:16px;
+  cursor:pointer;
+}
+.letter-btn.disabled { background: rgba(100,100,100,0.2); color: rgba(200,200,200,0.5); cursor:not-allowed; }
 
 #message-box {
   position:absolute;
@@ -118,20 +127,17 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 </div>
 
 <div id="quiz">
-  <!-- Typed prefix row (appears above keyboard) -->
-  <div id="typed-row">
-    <div id="prefix-display"></div>
-    <button id="backspace-btn">⌫</button>
+  <div id="bottom-row">
+    <div id="typed-row">
+      <div id="prefix-display"></div>
+      <button id="backspace-btn">⌫</button>
+    </div>
+    <div id="street-list"></div>
   </div>
-
-  <!-- Letter keyboard -->
   <div id="letters"></div>
-
-  <!-- Street alternatives at bottom -->
-  <div id="street-list"></div>
 </div>
 
-<div id="message-box"><span class="text"></span></div>
+<div id="message-box"></div>
 
 <script>
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGFnZ2U5MyIsImEiOiJjbWtyemxiaDIxM3pjM2NxcjhtNml1dW05In0.CLTKS6_OWkFIBgao72y6iQ';
@@ -169,19 +175,90 @@ const backspaceBtn=document.getElementById('backspace-btn');
 
 let currentPrefix = "";
 
+// QWERTY letters with Å, Ä, Ö
+const qwertyRows = [
+  ['Q','W','E','R','T','Y','U','I','O','P'],
+  ['A','S','D','F','G','H','J','K','L','Å'],
+  ['Z','X','C','V','B','N','M','Ä','Ö']
+];
+let letterButtons=[];
+
+function createLetterButtons(){
+  lettersDiv.innerHTML='';
+  letterButtons=[];
+  qwertyRows.forEach(row=>{
+    const rowDiv = document.createElement('div');
+    rowDiv.className='letter-row';
+    row.forEach(letter=>{
+      const btn = document.createElement('button');
+      btn.className='letter-btn';
+      btn.textContent = letter;
+      btn.addEventListener('click', ()=>{
+        if(btn.classList.contains('disabled')) return;
+        currentPrefix += letter;
+        backspaceBtn.style.display='inline-block';
+        updatePrefix();
+      });
+      rowDiv.appendChild(btn);
+      letterButtons.push(btn);
+    });
+    lettersDiv.appendChild(rowDiv);
+  });
+  backspaceBtn.addEventListener('click', ()=>{
+    if(currentPrefix.length>0){
+      currentPrefix = currentPrefix.slice(0,-1);
+      updatePrefix();
+    }
+    if(currentPrefix.length===0) backspaceBtn.style.display='none';
+  });
+}
+
+function updatePrefix(){
+  prefixDisplay.textContent = currentPrefix;
+  updateLetterStates();
+  updateStreetList();
+}
+
+function updateLetterStates(){
+  const prefix = currentPrefix.toLowerCase();
+  letterButtons.forEach(btn=>{
+    const letter = btn.textContent.toLowerCase();
+    const possible = allStreets && allStreets.some(s=>{
+      if(usedStreets.has(s.name)) return false;
+      return s.name.toLowerCase().startsWith(prefix + letter);
+    });
+    if(possible) btn.classList.remove('disabled');
+    else btn.classList.add('disabled');
+  });
+}
+
+function updateStreetList(){
+  streetListDiv.innerHTML='';
+  if(currentPrefix.length===0) return;
+  const filtered = allStreets
+    .filter(s => !usedStreets.has(s.name) && s.name.toLowerCase().startsWith(currentPrefix.toLowerCase()))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  filtered.forEach(s=>{
+    const btn = document.createElement('button');
+    btn.className='street-btn';
+    btn.textContent = s.name;
+    btn.addEventListener('click', ()=>{ checkAnswer(s.name); });
+    streetListDiv.appendChild(btn);
+  });
+}
+
 function updateHUD(){ 
   progressDiv.textContent=`Street ${currentStreetIndex+1} / ${allStreets?allStreets.length:0}`; 
   livesDiv.textContent=`Lives: ${'❤️'.repeat(lives)}`; 
   recordDiv.textContent=`Record: ${record}`; 
 }
 
-function showFeedback(text, correct=true){
+function showMessageBox(text, correct=true){
   messageBox.textContent = text;
   messageBox.className = correct ? 'correct' : 'wrong';
   messageBox.style.display='block';
+  setTimeout(()=>{ messageBox.style.display='none'; },3000);
 }
-
-function hideFeedback(){ messageBox.style.display='none'; }
 
 function pickRandom(arr,n){ const result=[]; const copy=[...arr]; for(let i=0;i<n;i++){ const idx=Math.floor(Math.random()*copy.length); result.push(copy.splice(idx,1)[0]); } return result; }
 
@@ -193,6 +270,9 @@ function highlightStreet(geojson,status){
   answeredSource.setData(turf.featureCollection([...existing,...geojson.features])); 
 }
 
+// -----------------------------
+// Fetch Polygon and Streets
+// -----------------------------
 async function fetchPolygon(areaName){ 
   const res=await fetch(`https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`); 
   const data=await res.json(); 
@@ -219,12 +299,15 @@ async function fetchStreets(polygon){
   return Object.keys(streetsByName).map(name=>({name,geometries:streetsByName[name]}));
 }
 
+// -----------------------------
+// Initialize Game
+// -----------------------------
 async function initializeArea(polygon){
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
     map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#FF0000','fill-opacity':0.1}});
     map.addLayer({id:'area-line',type:'line',source:'area',paint:{'line-color':'#FF0000','line-width':3}});
-  } else { map.getSource('area').setData(polygon); }
+  } else map.getSource('area').setData(polygon);
 
   allStreets=await fetchStreets(polygon);
 
@@ -235,87 +318,19 @@ async function initializeArea(polygon){
   }
 
   createLetterButtons();
-  updateHUD();
   nextRound();
+  updateHUD();
 }
 
-// QWERTY layout including Å Ä Ö
-const qwertyRows = [
-  ['Q','W','E','R','T','Y','U','I','O','P'],
-  ['A','S','D','F','G','H','J','K','L','Å'],
-  ['Z','X','C','V','B','N','M','Ä','Ö']
-];
-
-let letterButtons = [];
-
-function createLetterButtons(){
-  lettersDiv.innerHTML='';
-  letterButtons = [];
-  qwertyRows.forEach(row=>{
-    const rowDiv = document.createElement('div');
-    rowDiv.className='letter-row';
-    row.forEach(letter=>{
-      const btn = document.createElement('button');
-      btn.className='letter-btn';
-      btn.textContent = letter;
-      btn.addEventListener('click', ()=>{
-        if(btn.classList.contains('disabled')) return;
-        currentPrefix += letter;
-        backspaceBtn.style.display='inline-block';
-        updatePrefix();
-      });
-      rowDiv.appendChild(btn);
-      letterButtons.push(btn);
-    });
-    lettersDiv.appendChild(rowDiv);
-  });
-
-  backspaceBtn.addEventListener('click', ()=>{
-    if(currentPrefix.length>0){
-      currentPrefix = currentPrefix.slice(0,-1);
-      updatePrefix();
-    }
-    if(currentPrefix.length===0) backspaceBtn.style.display='none';
-  });
-}
-
-function updatePrefix(){
-  prefixDisplay.textContent = currentPrefix;
-  updateLetterStates();
-  updateStreetList();
-}
-
-function updateLetterStates(){
-  const prefix = currentPrefix.toLowerCase();
-  letterButtons.forEach(btn=>{
-    const letter = btn.textContent.toLowerCase();
-    const possible = allStreets.some(s=>{
-      if(usedStreets.has(s.name)) return false;
-      return s.name.toLowerCase().startsWith(prefix + letter);
-    });
-    if(possible) btn.classList.remove('disabled');
-    else btn.classList.add('disabled');
-  });
-}
-
-function updateStreetList(){
-  streetListDiv.innerHTML='';
-  if(currentPrefix.length===0) return;
-  const filtered = allStreets
-    .filter(s => !usedStreets.has(s.name) && s.name.toLowerCase().startsWith(currentPrefix.toLowerCase()))
-    .sort((a,b)=>a.name.localeCompare(b.name));
-  filtered.forEach(s=>{
-    const btn = document.createElement('button');
-    btn.className='street-btn';
-    btn.textContent = s.name;
-    btn.addEventListener('click', ()=>{ checkAnswer(s.name); });
-    streetListDiv.appendChild(btn);
-  });
-}
-
+// -----------------------------
+// Next Round
+// -----------------------------
 function nextRound(){
+  currentPrefix="";
+  prefixDisplay.textContent="";
+  backspaceBtn.style.display='none';
   const remainingStreets = allStreets.filter(s=>!usedStreets.has(s.name));
-  if(remainingStreets.length<1){ showFeedback("Game Over", false); setTimeout(resetGame,3000); return; }
+  if(remainingStreets.length<1){ showMessageBox('Game Over', false); setTimeout(resetGame,3000); return; }
   currentStreet = pickRandom(remainingStreets,1)[0];
 
   currentGeoJSON = turf.featureCollection(currentStreet.geometries.map(geom=>({type:'Feature',geometry:{type:'LineString',coordinates:geom},properties:{}})));
@@ -332,13 +347,14 @@ function nextRound(){
     highlightSourceAdded=true; 
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
-  currentPrefix = "";
-  backspaceBtn.style.display='none';
-  updatePrefix();
+  updateLetterStates();
+  updateStreetList();
   updateHUD();
 }
 
-// Check answer
+// -----------------------------
+// Check Answer
+// -----------------------------
 function checkAnswer(answer){
   if(!currentStreet) return;
   const isCorrect = answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
@@ -347,29 +363,37 @@ function checkAnswer(answer){
     currentStreetIndex++;
     record=Math.max(record,currentStreetIndex);
     localStorage.setItem('stockholmStreetRecord',record);
-    showFeedback("Rätt", true);
+    showMessageBox('Rätt svar', true);
   } else {
     lives--;
-    showFeedback(`Fel! Rätt svar: ${currentStreet.name}`, false);
+    showMessageBox('Fel! Rätt svar: '+currentStreet.name, false);
+    if(lives===0){ setTimeout(resetGame,3000); return; }
   }
   usedStreets.add(currentStreet.name);
   updateHUD();
-  setTimeout(()=>{ hideFeedback(); nextRound(); },3000);
+  setTimeout(nextRound,3000);
 }
 
-// Init game
-async function initGame() {
-  try {
+// -----------------------------
+// Reset Game
+// -----------------------------
+function resetGame(){ 
+  lives=3; currentStreetIndex=0; usedStreets.clear(); 
+  if(map.getSource('answered-streets')) map.getSource('answered-streets').setData(turf.featureCollection([])); 
+  nextRound(); 
+  updateHUD(); 
+}
+
+// -----------------------------
+// Initialize
+// -----------------------------
+async function initGame(){
+  try{
     const polygon = await fetchPolygon('Södermalm');
-    currentPolygon = polygon;
-    if(!mapReady){ 
-      map.on('load',()=>initializeArea(polygon)); 
-    } else { 
-      initializeArea(polygon); 
-    }
-  } catch(e) { 
-    alert('Error fetching area: '+e.message); 
-  }
+    currentPolygon=polygon;
+    if(!mapReady){ map.on('load',()=>initializeArea(polygon)); }
+    else initializeArea(polygon);
+  }catch(e){ alert('Error fetching area: '+e.message); }
 }
 initGame();
 </script>
