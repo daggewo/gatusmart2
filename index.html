@@ -84,29 +84,30 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 }
 .street-btn:hover { background: rgba(255,255,255,0.4); }
 
-/* Keyboard */
+/* Keyboard - responsive scale to fit screen */
 #letters {
   display:flex;
   flex-direction: column;
   gap:5px;
-  max-width:100%;
-  overflow-x:auto;
-  padding-bottom:5px;
+  width: 100%;
+  box-sizing: border-box;
+  padding:5px 0;
 }
+
 .letter-row {
   display:flex;
-  justify-content:center;
-  gap:5px;
-  flex-wrap: nowrap;
+  justify-content: space-between; /* spread letters evenly */
+  gap:2px;
 }
+
 .letter-btn {
-  flex-shrink:0;
-  min-width: 40px;
-  text-align: center;
+  flex: 1;               /* each button takes equal space */
+  min-width:30px;
+  text-align:center;
   background: rgba(255,255,255,0.2);
   color:white;
   border:none;
-  padding:8px 12px;
+  padding:8px 0;
   border-radius:5px;
   font-size:16px;
   cursor:pointer;
@@ -294,10 +295,9 @@ async function fetchPolygon(areaName){
 async function fetchStreets(polygon){
   const coords=polygon.type==='Polygon'?polygon.coordinates[0]:polygon.coordinates.flat(1);
   const lats=coords.map(c=>c[1]), lngs=coords.map(c=>c[0]);
-  const bounds=[[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]];
-  map.fitBounds(bounds,{padding:50});
-  const bbox=bounds.flat();
-  const query=`[out:json][timeout:200];(way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]}););out geom;`;
+  map.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],{padding:50});
+  const bbox=[Math.min(...lats),Math.min(...lngs),Math.max(...lats),Math.max(...lngs)];
+  const query=`[out:json][timeout:200];(way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out geom;`;
   const resOSM=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:query,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
   const dataOSM=await resOSM.json();
   const streetsByName={};
