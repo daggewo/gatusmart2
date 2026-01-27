@@ -84,17 +84,6 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 
 .street-btn:hover { background: rgba(255,255,255,0.4); }
 
-#pass-btn {
-  background: rgba(255,0,0,0.6);
-  color:white;
-  border:none;
-  padding:10px;
-  font-size:16px;
-  border-radius:5px;
-  cursor:pointer;
-  margin-top:5px;
-}
-
 #message-box {
   position:absolute;
   top:50%;
@@ -128,7 +117,6 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 <div id="quiz">
   <div id="letters"></div>
   <div id="street-list"></div>
-  <button id="pass-btn">Passa</button>
 </div>
 
 <div id="message-box"><span class="text">Game Over</span><span class="rekord">Rekord: 0</span></div>
@@ -164,7 +152,6 @@ const recordDiv=document.getElementById('record');
 const messageBox=document.getElementById('message-box');
 const lettersDiv=document.getElementById('letters');
 const streetListDiv=document.getElementById('street-list');
-const passBtn = document.getElementById('pass-btn');
 
 function updateHUD(){ 
   progressDiv.textContent=`Street ${currentStreetIndex+1} / ${allStreets?allStreets.length:0}`; 
@@ -260,7 +247,10 @@ function createLetterButtons(){
 function populateStreetList(letter){
   streetListDiv.innerHTML='';
   if(!allStreets) return;
-  const filtered = allStreets.filter(s => !usedStreets.has(s.name) && s.name[0].toUpperCase() === letter);
+  // **Sort streets alphabetically**
+  const filtered = allStreets
+    .filter(s => !usedStreets.has(s.name) && s.name[0].toUpperCase() === letter)
+    .sort((a,b)=>a.name.localeCompare(b.name));
   filtered.forEach(s=>{
     const btn = document.createElement('button');
     btn.className='street-btn';
@@ -282,6 +272,7 @@ function nextRound(){
   const streetBounds=[[Math.min(...lngs)-0.001,Math.min(...lats)-0.001],[Math.max(...lngs)+0.001,Math.max(...lats)+0.001]];
   map.fitBounds(streetBounds,{padding:120,maxZoom:15,duration:1000,essential:true});
 
+  // Map layer setup
   if(!highlightSourceAdded){ 
     map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON}); 
     map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'black','line-width':10}});
@@ -289,17 +280,13 @@ function nextRound(){
     highlightSourceAdded=true; 
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
-  // Automatically select first letter of street
-  const firstLetter = currentStreet.name[0].toUpperCase();
-  document.querySelectorAll('.letter-btn').forEach(b=>{
-    b.classList.toggle('selected', b.textContent === firstLetter);
-  });
-  populateStreetList(firstLetter);
+  // At the start, **no letter is preselected**. Streets list is empty.
+  streetListDiv.innerHTML='';
 
   updateHUD();
 }
 
-// Kolla svar
+// Check answer
 function checkAnswer(answer){
   if(!currentStreet) return;
   const isCorrect = answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
@@ -316,13 +303,6 @@ function checkAnswer(answer){
   updateHUD();
   setTimeout(nextRound,500);
 }
-
-// Passa-knapp
-passBtn.addEventListener('click', ()=>{
-  highlightStreet(currentGeoJSON,'wrong');
-  usedStreets.add(currentStreet.name);
-  nextRound();
-});
 
 // Init game
 async function initGame() {
