@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Stockholm Street Quiz</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<style>
+html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
+#map { position:absolute; top:0; bottom:0; width:100%; }
+
+#hud {
+  position:absolute;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:10px;
+  color:white;
+  font-size:16px;
+  font-weight:bold;
+  z-index:10;
+  padding:10px 20px;
+  width:90%;
+  max-width:700px;
+  justify-content: space-between;
+  text-align:center;
+}
+
+#hud div { white-space: nowrap; flex: 1; }
+
+#quiz {
+  position:absolute; 
+  bottom:0; 
+  left:0; 
+  width:100%; 
+  display:flex; 
+  justify-content:center; 
+  gap:10px;
+  z-index:10; 
+  padding:15px;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+
+#street-input {
+  font-size:16px;
+  padding:10px;
+  border-radius:5px;
+  border:2px solid white;
+  background: rgba(0,0,0,0.9);
+  color:white;
+  flex: 1 1 60%;
+}
+
+#pass-btn {
+  font-size:16px;
+  padding:10px 20px;
+  border-radius:5px;
+  border:2px solid white;
+  background: rgba(0,0,0,0.9);
+  color:white;
+  cursor:pointer;
+  flex: 1 1 30%;
+}
+
+#pass-btn:hover, #street-input:focus { background: rgba(0,0,0,1); outline:none; }
+
+#message-box {
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform: translate(-50%,-50%);
+  min-width:250px;
+  padding:30px 35px;
+  text-align:center;
+  font-size:20px;
+  font-weight:bold;
+  color:white;
+  border-radius:15px;
+  border:3px solid white;
+  background: rgba(120,120,120,0.9);
+  z-index:20;
+  display:none;
+}
+
+#message-box span.rekord { display:block; margin-top:10px; font-size:18px; font-weight:normal; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="hud">
+  <div id="progress">Street 0 / 0</div>
+  <div id="lives">Lives: ❤️❤️❤️</div>
+  <div id="record">Record: 0</div>
+</div>
+
+<div id="quiz">
+  <input type="text" id="street-input" placeholder="Skriv gatan..." list="street-suggestions" autocomplete="off">
+  <button id="pass-btn">Passa</button>
+  <datalist id="street-suggestions"></datalist>
+</div>
+
+<div id="message-box"><span class="text">Game Over</span><span class="rekord">Rekord: 0</span></div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiZGFnZ2U5MyIsImEiOiJjbWtyemxiaDIxM3pjM2NxcjhtNml1dW05In0.CLTKS6_OWkFIBgao72y6iQ';
+const map = new mapboxgl.Map({
+  container:'map',
+  style:'mapbox://styles/dagge93/cmkrzm5eu002s01s97z3t95rv?',
+  center:[18.07,59.31],
+  zoom:13,
+  dragRotate:false,
+  touchPitch:false
+});
+let mapReady=false;
+map.once('load',()=>{ mapReady=true; });
+
+let currentPolygon=null;
+let allStreets=null;
+const usedStreets=new Set();
+let highlightLayerId='current-highlight';
+let highlightSourceAdded=false;
+let currentStreetIndex=0;
+let lives=3;
+let currentStreet=null;
+let currentGeoJSON=null;
+
+// Load record
+let record = Number(localStorage.getItem('stockholmStreetRecord')) || 0;
+
+const progressDiv=document.getElementById('progress');
+const livesDiv=document.getElementById('lives');
+const recordDiv=document.getElementById('record');
+const messageBox=document.getElementById('message-box');
+const streetInput = document.getElementById('street-input');
+const streetSuggestions = document.getElementById('street-suggestions');
+const passBtn = document.getElementById('pass-btn');
+
+function updateHUD(){ 
+  progressDiv.textContent=`Street ${currentStreetIndex+1} / ${allStreets?allStreets.length:0}`; 
+  livesDiv.textContent=`Lives: ${'❤️'.repeat(lives)}`; 
+  recordDiv.textContent=`Record: ${record}`; 
+}
+
+function showMessage(){ 
+  messageBox.querySelector('.text').textContent='Game Over'; 
+  messageBox.querySelector('.rekord').textContent=`Rekord: ${record}`; 
+  messageBox.style.display='block'; 
+  setTimeout(()=>{ messageBox.style.display='none'; },3000); 
+}
+
+function resetGame(){ 
+  lives=3; currentStreetIndex=0; usedStreets.clear(); 
+  if(map.getSource('answered-streets')) map.getSource('answered-streets').setData(turf.featureCollection([])); 
+  nextRound(); 
+  updateHUD(); 
+}
+
+function pickRandom(arr,n){ const result=[]; const copy=[...arr]; for(let i=0;i<n;i++){ const idx=Math.floor(Math.random()*copy.length); result.push(copy.splice(idx,1)[0]); } return result; }
+
+function highlightStreet(geojson,status){ 
+  geojson.features.forEach(f=>f.properties.status=status); 
+  const answeredSource=map.getSource('answered-streets'); 
+  const existing=answeredSource._data.features.filter(f=>!geojson.features.some(cf=>cf.geometry.coordinates[0][0]===f.geometry.coordinates[0][0])); 
+  answeredSource.setData(turf.featureCollection([...existing,...geojson.features])); 
+}
+
+async function fetchPolygon(areaName){ 
+  const res=await fetch(`https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`); 
+  const data=await res.json(); 
+  if(!data.length) throw new Error("No polygon found"); 
+  return data[0].geojson; 
+}
+
+async function fetchStreets(polygon){
+  const coords=polygon.type==='Polygon'?polygon.coordinates[0]:polygon.coordinates.flat(1);
+  const lats=coords.map(c=>c[1]), lngs=coords.map(c=>c[0]);
+  const bounds=[[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]];
+  map.fitBounds(bounds,{padding:50});
+  const bbox=bounds.flat();
+  const query=`[out:json][timeout:200];(way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"](${bbox[1]},${bbox[0]},${bbox[3]},${bbox[2]}););out geom;`;
+  const resOSM=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:query,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const dataOSM=await resOSM.json();
+  const streetsByName={};
+  dataOSM.elements.filter(el=>el.tags && el.tags.name).forEach(el=>{
+    const geom=el.geometry.map(pt=>[pt.lon,pt.lat]);
+    if(!turf.booleanWithin({type:'LineString',coordinates:geom},polygon)) return;
+    if(!streetsByName[el.tags.name]) streetsByName[el.tags.name]=[];
+    streetsByName[el.tags.name].push(geom);
+  });
+  return Object.keys(streetsByName).map(name=>({name,geometries:streetsByName[name]}));
+}
+
+async function initializeArea(polygon){
+  if(!map.getSource('area')){
+    map.addSource('area',{type:'geojson',data:polygon});
+    map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#FF0000','fill-opacity':0.1}});
+    map.addLayer({id:'area-line',type:'line',source:'area',paint:{'line-color':'#FF0000','line-width':3}});
+  } else { map.getSource('area').setData(polygon); }
+
+  allStreets=await fetchStreets(polygon);
+
+  if(!map.getSource('answered-streets')){
+    map.addSource('answered-streets',{type:'geojson',data:turf.featureCollection([])});
+    map.addLayer({id:'answered-correct',type:'line',source:'answered-streets',filter:['==',['get','status'],'correct'],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'lime','line-width':6}});
+    map.addLayer({id:'answered-wrong',type:'line',source:'answered-streets',filter:['==',['get','status'],'wrong'],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'red','line-width':6}});
+  }
+
+  updateHUD();
+  nextRound();
+}
+
+// Start på Södermalm
+async function initGame() {
+  try {
+    const polygon = await fetchPolygon('Södermalm');
+    currentPolygon = polygon;
+    if(!mapReady){ 
+      map.on('load',()=>initializeArea(polygon)); 
+    } else { 
+      initializeArea(polygon); 
+    }
+  } catch(e) { 
+    alert('Error fetching area: '+e.message); 
+  }
+}
+initGame();
+
+function updateSuggestions() {
+  streetSuggestions.innerHTML = '';
+  allStreets.filter(s => !usedStreets.has(s.name)).forEach(s => {
+    const option = document.createElement('option');
+    option.value = s.name;
+    streetSuggestions.appendChild(option);
+  });
+}
+
+function nextRound(){
+  const remainingStreets = allStreets.filter(s=>!usedStreets.has(s.name));
+  if(remainingStreets.length<1){ showMessage(); setTimeout(resetGame,3000); return; }
+  currentStreet = pickRandom(remainingStreets,1)[0];
+
+  currentGeoJSON = turf.featureCollection(currentStreet.geometries.map(geom=>({type:'Feature',geometry:{type:'LineString',coordinates:geom},properties:{}})));
+
+  const streetCoords=currentGeoJSON.features.flatMap(f=>f.geometry.coordinates);
+  const lats=streetCoords.map(c=>c[1]), lngs=streetCoords.map(c=>c[0]);
+  const streetBounds=[[Math.min(...lngs)-0.001,Math.min(...lats)-0.001],[Math.max(...lngs)+0.001,Math.max(...lats)+0.001]];
+  map.fitBounds(streetBounds,{padding:120,maxZoom:15,duration:1000,essential:true});
+
+  if(!highlightSourceAdded){ 
+    map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON}); 
+    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'black','line-width':10}});
+    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'white','line-width':6}});
+    highlightSourceAdded=true; 
+  } else map.getSource(highlightLayerId).setData(currentGeoJSON);
+
+  streetInput.value='';
+  streetInput.focus();
+  updateSuggestions();
+  updateHUD();
+}
+
+// Kolla svar
+function checkAnswer(answer){
+  if(!currentStreet) return;
+  const isCorrect = answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
+  highlightStreet(currentGeoJSON, isCorrect?'correct':'wrong');
+  if(isCorrect){
+    currentStreetIndex++;
+    record=Math.max(record,currentStreetIndex);
+    localStorage.setItem('stockholmStreetRecord',record);
+  } else {
+    lives--;
+    if(lives===0){ showMessage(); setTimeout(resetGame,3000); return; }
+  }
+  usedStreets.add(currentStreet.name);
+  updateHUD();
+  setTimeout(nextRound,1000);
+}
+
+// Lyssna på input → om matchar kvarvarande gator trigga direkt
+streetInput.addEventListener('input', () => {
+  if(!currentStreet) return;
+  const val = streetInput.value.trim();
+  if(!val) return;
+  const matchedStreet = allStreets.find(s => !usedStreets.has(s.name) && s.name.toLowerCase() === val.toLowerCase());
+  if(matchedStreet){
+    checkAnswer(matchedStreet.name);
+  }
+});
+
+// Passa-knapp
+passBtn.addEventListener('click', ()=>{
+  highlightStreet(currentGeoJSON,'wrong');
+  usedStreets.add(currentStreet.name);
+  nextRound();
+});
+
+</script>
+</body>
+</html>
