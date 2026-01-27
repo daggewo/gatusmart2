@@ -7,10 +7,12 @@
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 #map { position:absolute; top:0; bottom:0; width:100%; }
 
+/* HUD */
 #hud {
   position:absolute;
   top:10px;
@@ -30,6 +32,7 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 }
 #hud div { white-space: nowrap; flex: 1; }
 
+/* QUIZ */
 #quiz {
   position:absolute;
   bottom:0;
@@ -41,28 +44,47 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   z-index:10;
   padding:10px;
   box-sizing:border-box;
-  background: rgba(0,0,0,0.8); /* less transparent */
+  background: rgba(0,0,0,0.8);
 }
 
-/* Bottom row: typed letters + alternatives */
+/* Bottom row */
 #bottom-row {
   display:flex;
   align-items:center;
   gap:8px;
+  justify-content:center;
   flex-wrap:nowrap;
   overflow-x:auto;
-  padding-bottom:12px; /* extra space */
+  padding-bottom:12px;
 }
 
 #typed-row {
   display:flex;
   align-items:center;
   gap:8px;
-  flex-shrink:0;
 }
 
-#prefix-display { color:white; font-size:20px; font-weight:bold; }
+#prefix-display {
+  color:white;
+  font-size:22px;
+  font-weight:bold;
+}
 
+/* PASS button */
+#pass-btn {
+  background:#900;
+  color:#fff;
+  border:none;
+  padding:10px 18px;
+  font-size:16px;
+  font-weight:bold;
+  border-radius:10px;
+  cursor:pointer;
+}
+#pass-btn.hidden { display:none; }
+#pass-btn:active { transform: scale(0.95); }
+
+/* Alternatives */
 #street-list {
   display:flex;
   gap:8px;
@@ -70,14 +92,27 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   overflow-x: auto;
 }
 
+.street-btn {
+  background:#111;
+  color:white;
+  border:none;
+  padding:12px 18px;
+  border-radius:14px;
+  font-size:18px;
+  font-weight:600;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.street-btn:active { transform: scale(0.95); }
+
 /* Keyboard */
 #letters {
   display:flex;
   flex-direction: column;
   gap:5px;
-  width: 100%;
-  box-sizing: border-box;
-  padding:5px 0;
+  width:100%;
+  box-sizing:border-box;
+  padding:0 12px 22px; /* top padding removed */
 }
 
 .letter-row {
@@ -87,18 +122,22 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 }
 
 .letter-btn {
-  flex: 1;
+  flex:1;
   min-width:30px;
   text-align:center;
   background: rgba(255,255,255,0.2);
   color:white;
   border:none;
-  padding:8px 0;
+  padding:14px 0;
   border-radius:5px;
-  font-size:16px;
+  font-size:18px;
   cursor:pointer;
 }
-.letter-btn.disabled { background: rgba(100,100,100,0.2); color: rgba(200,200,200,0.5); cursor:not-allowed; }
+.letter-btn.disabled {
+  background: rgba(100,100,100,0.2);
+  color: rgba(200,200,200,0.5);
+  cursor:not-allowed;
+}
 
 /* Message Box */
 #message-box {
@@ -115,11 +154,11 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   z-index:20;
   display:none;
 }
-
-#message-box.correct { color: #0f0; background: rgba(0,0,0,0.8); border:3px solid #0f0; }
-#message-box.wrong { color: #f00; background: rgba(0,0,0,0.8); border:3px solid #f00; }
+#message-box.correct { color:#0f0; background: rgba(0,0,0,0.8); border:3px solid #0f0; }
+#message-box.wrong { color:#f00; background: rgba(0,0,0,0.8); border:3px solid #f00; }
 </style>
 </head>
+
 <body>
 <div id="map"></div>
 
@@ -133,6 +172,7 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
   <div id="bottom-row">
     <div id="typed-row">
       <div id="prefix-display"></div>
+      <button id="pass-btn">PASS</button>
     </div>
     <div id="street-list"></div>
   </div>
@@ -172,9 +212,17 @@ const messageBox=document.getElementById('message-box');
 const lettersDiv=document.getElementById('letters');
 const streetListDiv=document.getElementById('street-list');
 const prefixDisplay=document.getElementById('prefix-display');
+const passBtn=document.getElementById('pass-btn');
+
 let currentPrefix = "";
 
-// QWERTY layout with Å, Ä, Ö + Backspace at end
+/* PASS = wrong answer */
+passBtn.addEventListener('click',()=>{
+  if(!currentStreet) return;
+  checkAnswer('__PASS__');
+});
+
+/* Keyboard */
 const qwertyRows = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L','Å'],
@@ -214,6 +262,7 @@ function createLetterButtons(){
 
 function updatePrefix(){
   prefixDisplay.textContent = currentPrefix;
+  passBtn.classList.toggle('hidden', currentPrefix.length > 0);
   updateLetterStates();
   updateStreetList();
 }
@@ -222,7 +271,7 @@ function updateLetterStates(){
   const prefix = currentPrefix.toLowerCase();
   letterButtons.forEach(btn=>{
     const letter = btn.textContent.toLowerCase();
-    if(letter==='⌫') return; // never disable backspace
+    if(letter==='⌫') return;
     const possible = allStreets && allStreets.some(s=>{
       if(usedStreets.has(s.name)) return false;
       return s.name.toLowerCase().startsWith(prefix + letter);
@@ -260,19 +309,32 @@ function showMessageBox(text, correct=true){
   setTimeout(()=>{ messageBox.style.display='none'; },3000);
 }
 
-function pickRandom(arr,n){ const result=[]; const copy=[...arr]; for(let i=0;i<n;i++){ const idx=Math.floor(Math.random()*copy.length); result.push(copy.splice(idx,1)[0]); } return result; }
+function pickRandom(arr,n){
+  const result=[];
+  const copy=[...arr];
+  for(let i=0;i<n;i++){
+    const idx=Math.floor(Math.random()*copy.length);
+    result.push(copy.splice(idx,1)[0]);
+  }
+  return result;
+}
 
 function highlightStreet(geojson,status){ 
   geojson.features.forEach(f=>f.properties.status=status); 
   if(!map.getSource('answered-streets')) return;
   const answeredSource=map.getSource('answered-streets'); 
-  const existing=answeredSource._data.features.filter(f=>!geojson.features.some(cf=>cf.geometry.coordinates[0][0]===f.geometry.coordinates[0][0])); 
+  const existing=answeredSource._data.features.filter(
+    f=>!geojson.features.some(
+      cf=>cf.geometry.coordinates[0][0]===f.geometry.coordinates[0][0]
+    )
+  ); 
   answeredSource.setData(turf.featureCollection([...existing,...geojson.features])); 
 }
 
-// Fetch polygon & streets
 async function fetchPolygon(areaName){ 
-  const res=await fetch(`https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`); 
+  const res=await fetch(
+    `https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(areaName)}+Stockholm&polygon_geojson=1&format=json`
+  ); 
   const data=await res.json(); 
   if(!data.length) throw new Error("No polygon found"); 
   return data[0].geojson; 
@@ -284,20 +346,25 @@ async function fetchStreets(polygon){
   const bounds=[[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]];
   map.fitBounds(bounds,{padding:50});
   const bbox=[bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0]];
-  const query=`[out:json][timeout:200];(way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out geom;`;
-  const resOSM=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:query,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const query=`[out:json][timeout:200];
+    (way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"]
+    (${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out geom;`;
+  const resOSM=await fetch('https://overpass-api.de/api/interpreter',{
+    method:'POST',
+    body:query,
+    headers:{'Content-Type':'application/x-www-form-urlencoded'}
+  });
   const dataOSM=await resOSM.json();
   const streetsByName={};
   dataOSM.elements.filter(el=>el.tags && el.tags.name).forEach(el=>{
     const geom=el.geometry.map(pt=>[pt.lon,pt.lat]);
     if(!turf.booleanWithin({type:'LineString',coordinates:geom},polygon)) return;
-    if(!streetsByName[el.tags.name]) streetsByName[el.tags.name]=[];
+    streetsByName[el.tags.name] ??= [];
     streetsByName[el.tags.name].push(geom);
   });
   return Object.keys(streetsByName).map(name=>({name,geometries:streetsByName[name]}));
 }
 
-// Initialize area and game
 async function initializeArea(polygon){
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
@@ -309,8 +376,14 @@ async function initializeArea(polygon){
 
   if(!map.getSource('answered-streets')){
     map.addSource('answered-streets',{type:'geojson',data:turf.featureCollection([])});
-    map.addLayer({id:'answered-correct',type:'line',source:'answered-streets',filter:['==',['get','status'],'correct'],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'lime','line-width':6}});
-    map.addLayer({id:'answered-wrong',type:'line',source:'answered-streets',filter:['==',['get','status'],'wrong'],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'red','line-width':6}});
+    map.addLayer({id:'answered-correct',type:'line',source:'answered-streets',
+      filter:['==',['get','status'],'correct'],
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':'lime','line-width':6}});
+    map.addLayer({id:'answered-wrong',type:'line',source:'answered-streets',
+      filter:['==',['get','status'],'wrong'],
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':'red','line-width':6}});
   }
 
   createLetterButtons();
@@ -318,65 +391,99 @@ async function initializeArea(polygon){
   updateHUD();
 }
 
-// Next round
 function nextRound(){
   currentPrefix="";
   prefixDisplay.textContent="";
+  passBtn.classList.remove('hidden');
+
   const remainingStreets = allStreets.filter(s=>!usedStreets.has(s.name));
-  if(remainingStreets.length<1){ showMessageBox('Game Over', false); setTimeout(resetGame,3000); return; }
+  if(remainingStreets.length<1){
+    showMessageBox('Game Over', false);
+    setTimeout(resetGame,3000);
+    return;
+  }
+
   currentStreet = pickRandom(remainingStreets,1)[0];
-  currentGeoJSON = turf.featureCollection(currentStreet.geometries.map(geom=>({type:'Feature',geometry:{type:'LineString',coordinates:geom},properties:{}})));
+  currentGeoJSON = turf.featureCollection(
+    currentStreet.geometries.map(geom=>({
+      type:'Feature',
+      geometry:{type:'LineString',coordinates:geom},
+      properties:{}
+    }))
+  );
+
   const streetCoords=currentGeoJSON.features.flatMap(f=>f.geometry.coordinates);
   const lats=streetCoords.map(c=>c[1]), lngs=streetCoords.map(c=>c[0]);
-  const streetBounds=[[Math.min(...lngs)-0.001,Math.min(...lats)-0.001],[Math.max(...lngs)+0.001,Math.max(...lats)+0.001]];
+  const streetBounds=[
+    [Math.min(...lngs)-0.001,Math.min(...lats)-0.001],
+    [Math.max(...lngs)+0.001,Math.max(...lats)+0.001]
+  ];
   map.fitBounds(streetBounds,{padding:120,maxZoom:15,duration:1000,essential:true});
-  if(!highlightSourceAdded){ 
-    map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON}); 
-    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'black','line-width':10}});
-    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'white','line-width':6}});
-    highlightSourceAdded=true; 
+
+  if(!highlightSourceAdded){
+    map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON});
+    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':'black','line-width':10}});
+    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':'white','line-width':6}});
+    highlightSourceAdded=true;
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
+
   updateLetterStates();
   updateStreetList();
   updateHUD();
 }
 
-// Check answer
 function checkAnswer(answer){
   if(!currentStreet) return;
-  const isCorrect = answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
+
+  const isCorrect =
+    answer !== '__PASS__' &&
+    answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
+
   highlightStreet(currentGeoJSON, isCorrect?'correct':'wrong');
+
   if(isCorrect){
     currentStreetIndex++;
     record=Math.max(record,currentStreetIndex);
     localStorage.setItem('stockholmStreetRecord',record);
-    showMessageBox('Rätt svar', true);
+    showMessageBox('Rätt!', true);
   } else {
     lives--;
-    showMessageBox('Fel! Rätt svar: '+currentStreet.name, false);
-    if(lives===0){ setTimeout(resetGame,3000); return; }
+    showMessageBox(currentStreet.name, false);
+    if(lives===0){
+      setTimeout(resetGame,3000);
+      return;
+    }
   }
+
   usedStreets.add(currentStreet.name);
   updateHUD();
   setTimeout(nextRound,3000);
 }
 
-// Reset
 function resetGame(){ 
-  lives=3; currentStreetIndex=0; usedStreets.clear(); 
-  if(map.getSource('answered-streets')) map.getSource('answered-streets').setData(turf.featureCollection([])); 
+  lives=3;
+  currentStreetIndex=0;
+  usedStreets.clear(); 
+  if(map.getSource('answered-streets'))
+    map.getSource('answered-streets').setData(turf.featureCollection([])); 
   nextRound(); 
   updateHUD(); 
 }
 
-// Start
 async function initGame(){
   try{
     const polygon = await fetchPolygon('Södermalm');
     currentPolygon=polygon;
-    if(!mapReady){ map.on('load',()=>initializeArea(polygon)); }
-    else initializeArea(polygon);
-  }catch(e){ alert('Error fetching area: '+e.message); }
+    if(!mapReady){
+      map.on('load',()=>initializeArea(polygon));
+    } else initializeArea(polygon);
+  }catch(e){
+    alert('Error fetching area: '+e.message);
+  }
 }
 initGame();
 </script>
