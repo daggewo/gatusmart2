@@ -303,11 +303,13 @@ let currentPrefix = "";
 
 
 
-const qwertyRows = [
+const keyboardLayout = [
   ['Q','W','E','R','T','Y','U','I','O','P','Å'],
   ['A','S','D','F','G','H','J','K','L','Ö','Ä'],
-  ['Z','X','C','V','B','N','M','⌫']
+  ['⏭','_','Z','X','C','V','B','N','M','_','⌫']
 ];
+
+
 let letterButtons=[];
 
 
@@ -315,64 +317,76 @@ function createLetterButtons() {
   lettersDiv.innerHTML = '';
   letterButtons = [];
 
-  // QWERTY rows
-  const qwertyRows = [
-    ['Q','W','E','R','T','Y','U','I','O','P','Å'],
-    ['A','S','D','F','G','H','J','K','L','Ö','Ä'],
-    ['Z','X','C','V','B','N','M','⌫']
-  ];
-
-  qwertyRows.forEach((row) => {
+  keyboardLayout.forEach(row => {
     const rowDiv = document.createElement('div');
     rowDiv.className = 'letter-row';
 
-    row.forEach((letter) => {
-      // Insert PASS button before Z
-      if(letter === 'Z') {
-       const passBtnKey = document.createElement('button');
-passBtnKey.id = 'pass-btn-keyboard';
-passBtnKey.className = 'letter-btn pass-btn transparent-pass';
-passBtnKey.textContent = '⏭';  // symbol for PASS
-passBtnKey.addEventListener('click', () => checkAnswer('__PASS__'));
-rowDiv.appendChild(passBtnKey);
+    row.forEach(key => {
+      // Cell container (same for all)
+      const cell = document.createElement('div');
+      cell.className = 'letter-btn';
 
-        // Add invisible spacer button between Pass and Z
-        const spacer1 = document.createElement('button');
-        spacer1.className = 'letter-btn spacer-btn';
-        spacer1.style.visibility = 'hidden'; // invisible
-        rowDiv.appendChild(spacer1);
-      }
-
-      // Add invisible spacer between M and Backspace
-      if(letter === '⌫') {
-        const spacer2 = document.createElement('button');
-        spacer2.className = 'letter-btn spacer-btn';
-        spacer2.style.visibility = 'hidden'; // invisible
-        rowDiv.appendChild(spacer2);
+      // SPACER
+      if (key === '_') {
+        cell.classList.add('spacer-btn');
+        cell.setAttribute('aria-hidden', 'true');
+        rowDiv.appendChild(cell);
+        return;
       }
 
       const btn = document.createElement('button');
-      btn.className = 'letter-btn';
-      btn.textContent = letter;
+      btn.style.all = 'unset';          // reset button styles
+      btn.style.width = '100%';
+      btn.style.height = '100%';
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.cursor = 'pointer';
+
+      // PASS
+      if (key === '⏭') {
+        btn.id = 'pass-btn-keyboard';
+        btn.classList.add('pass-btn', 'transparent-pass');
+        btn.textContent = '⏭';
+        btn.addEventListener('click', () => checkAnswer('__PASS__'));
+        cell.appendChild(btn);
+        rowDiv.appendChild(cell);
+        return;
+      }
+
+      // BACKSPACE
+      if (key === '⌫') {
+        btn.textContent = '⌫';
+        btn.addEventListener('click', () => {
+          if (currentPrefix.length > 0) {
+            currentPrefix = currentPrefix.slice(0, -1);
+            updatePrefix();
+          }
+        });
+        cell.appendChild(btn);
+        rowDiv.appendChild(cell);
+        letterButtons.push(cell);
+        return;
+      }
+
+      // LETTER
+      btn.textContent = key;
       btn.addEventListener('click', () => {
-        if(btn.classList.contains('disabled')) return;
-
-        if(letter === '⌫') {
-          if(currentPrefix.length > 0) currentPrefix = currentPrefix.slice(0, -1);
-        } else {
-          currentPrefix += letter;
-        }
-
+        if (cell.classList.contains('disabled')) return;
+        currentPrefix += key;
         updatePrefix();
       });
 
-      rowDiv.appendChild(btn);
-      letterButtons.push(btn);
+      cell.appendChild(btn);
+      rowDiv.appendChild(cell);
+      letterButtons.push(cell);
     });
 
     lettersDiv.appendChild(rowDiv);
   });
 }
+
+
 
 
 
@@ -578,35 +592,38 @@ function checkAnswer(answer) {
   const isCorrect = !isPass && answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
 
   // Highlight the street
-  highlightStreet(currentGeoJSON, isCorrect ? 'correct' : 'wrong'); // green for correct, red for wrong/pass
+  highlightStreet(currentGeoJSON, isCorrect ? 'correct' : 'wrong');
 
-  currentStreetIndex++;
-  updateHUD();
   usedStreets.add(currentStreet.name);
 
+  // Always increment progress
+  currentStreetIndex++;
+  updateHUD();
+
   if (isCorrect) {
-    // Correct answer
-    record = Math.max(record, currentStreetIndex);
+    // Only update record on correct answers
+    record = Math.max(record, record + 1); // increment record by 1 if correct
     localStorage.setItem('stockholmStreetRecord', record);
     showMessageBox('Rätt!', true);
-    return; // wait for click
+    return;
   }
 
-  // Wrong guess OR pass reduces lives
+  // Wrong guess or pass reduces lives
   lives--;
+  updateHUD();
 
-  // Game over check
   if (lives === 0) {
     showMessageBox(`
       <span class="game-over-title">Game Over</span>
       <span class="street-name">${currentStreet.name}</span>
     `, false);
-    return; // click will reset
+    return;
   }
 
-  // Wrong guess or pass: just show the street name
+  // Wrong guess or pass: show the street name
   showMessageBox(`<span class="street-name">${currentStreet.name}</span>`, false);
 }
+
 
 
 
