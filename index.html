@@ -174,10 +174,18 @@ html, body {
 }
 
 /* Pass button on keyboard */
-.letter-btn.pass-btn {
-  background: #900;
+.letter-btn.pass-btn.transparent-pass {
+  background: transparent;   /* remove red background */
+  color: white;              /* keep symbol visible */
   font-weight: bold;
+  border: none;              /* remove border */
+  padding: 0;                /* optional */
+  font-size: 24px;           /* make the ⏭ symbol bigger */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 
 /* Spacer buttons */
 .letter-btn.spacer-btn {
@@ -267,6 +275,18 @@ let record = Number(localStorage.getItem('stockholmStreetRecord')) || 0;
 const progressDiv=document.getElementById('progress');
 const livesDiv=document.getElementById('lives');
 const recordDiv=document.getElementById('record');
+
+recordDiv.style.cursor = 'pointer'; // show pointer on hover
+recordDiv.title = 'Click to reset record'; // optional tooltip
+
+recordDiv.addEventListener('click', () => {
+  if(confirm('Are you sure you want to reset the record?')) {
+    localStorage.removeItem('stockholmStreetRecord'); // clear storage
+    record = 0;                                       // reset variable
+    updateHUD();                                      // update display
+  }
+});
+
 const messageBox=document.getElementById('message-box');
 const lettersDiv=document.getElementById('letters');
 const streetListDiv=document.getElementById('street-list');
@@ -309,12 +329,12 @@ function createLetterButtons() {
     row.forEach((letter) => {
       // Insert PASS button before Z
       if(letter === 'Z') {
-        const passBtnKey = document.createElement('button');
-        passBtnKey.id = 'pass-btn-keyboard';
-        passBtnKey.className = 'letter-btn pass-btn'; // red background
-        passBtnKey.textContent = '⏭';  // symbol for PASS
-        passBtnKey.addEventListener('click', () => checkAnswer('__PASS__'));
-        rowDiv.appendChild(passBtnKey);
+       const passBtnKey = document.createElement('button');
+passBtnKey.id = 'pass-btn-keyboard';
+passBtnKey.className = 'letter-btn pass-btn transparent-pass';
+passBtnKey.textContent = '⏭';  // symbol for PASS
+passBtnKey.addEventListener('click', () => checkAnswer('__PASS__'));
+rowDiv.appendChild(passBtnKey);
 
         // Add invisible spacer button between Pass and Z
         const spacer1 = document.createElement('button');
