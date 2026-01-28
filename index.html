@@ -309,6 +309,8 @@ const keyboardLayout = [
   ['⏭','_','Z','X','C','V','B','N','M','_','⌫']
 ];
 
+let score = 0;
+
 
 let letterButtons=[];
 
@@ -602,7 +604,12 @@ function checkAnswer(answer) {
 
   if (isCorrect) {
     // Only update record on correct answers
-    record = Math.max(record, record + 1); // increment record by 1 if correct
+score++;
+
+if (score > record) {
+  record = score;
+  localStorage.setItem('stockholmStreetRecord', record);
+}
     localStorage.setItem('stockholmStreetRecord', record);
     showMessageBox('Rätt!', true);
     return;
@@ -632,6 +639,7 @@ function checkAnswer(answer) {
 // Reset
 function resetGame(){ 
   lives=3;
+  score = 0
   currentStreetIndex=0;
   usedStreets.clear(); 
   if(map.getSource('answered-streets')) map.getSource('answered-streets').setData(turf.featureCollection([])); 
