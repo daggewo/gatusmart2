@@ -388,6 +388,12 @@ btn.style.borderRadius = '6px';
 
 
 
+function normalizeText(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD')                 // split letters + accents
+    .replace(/[\u0300-\u036f]/g, ''); // remove accents
+}
 
 
 
@@ -398,16 +404,18 @@ function updatePrefix(){
 }
 
 function updateLetterStates(){
-  const prefix = currentPrefix.toLowerCase();
-  letterButtons.forEach(btn=>{
+  const prefix = normalizeText(currentPrefix);
+
+  letterButtons.forEach(btn => {
     const letter = btn.textContent.toLowerCase();
-    if(letter==='⌫') return;
-    const possible = allStreets && allStreets.some(s=>{
-      if(usedStreets.has(s.name)) return false;
-      return s.name.toLowerCase().startsWith(prefix + letter);
+    if (letter === '⌫') return;
+
+    const possible = allStreets && allStreets.some(s => {
+      if (usedStreets.has(s.name)) return false;
+      return normalizeText(s.name).includes(prefix + letter);
     });
-    if(possible) btn.classList.remove('disabled');
-    else btn.classList.add('disabled');
+
+    btn.classList.toggle('disabled', !possible);
   });
 }
 
@@ -415,7 +423,7 @@ function updateStreetList(){
   streetListDiv.innerHTML='';
   if(currentPrefix.length===0) return;
   const filtered = allStreets
-    .filter(s => !usedStreets.has(s.name) && s.name.toLowerCase().startsWith(currentPrefix.toLowerCase()))
+    .filter(s => !usedStreets.has(s.name) && normalizeText(s.name).toLowerCase().includes(currentPrefix.toLowerCase()))
     .sort((a,b)=>a.name.localeCompare(b.name));
   filtered.forEach(s=>{
     const btn = document.createElement('button');
@@ -502,9 +510,9 @@ async function fetchStreets(polygon){
   // 1️⃣ Try to load from local cache first
   const cached = localStorage.getItem('sodermalmStreets');
   if (cached) {
-    console.log('Using cached streets');
-    return JSON.parse(cached);
-  }
+   console.log('Using cached streets');
+  return JSON.parse(cached);
+ }
 
   // 2️⃣ Prepare Overpass query
   const coords = polygon.type==='Polygon' ? polygon.coordinates[0] : polygon.coordinates.flat(1);
@@ -513,7 +521,7 @@ async function fetchStreets(polygon){
   map.fitBounds(bounds,{padding:50});
   const bbox = [bounds[0][1], bounds[0][0], bounds[1][1], bounds[1][0]];
   const query = `[out:json][timeout:200];
-    (way["highway"~"primary|secondary|tertiary|residential|unclassified"]["name"]
+    (way["highway"~"primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian|track"]["name"]
     (${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out geom;`;
 
   // 3️⃣ Fetch from Overpass with error handling
