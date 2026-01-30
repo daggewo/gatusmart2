@@ -582,22 +582,69 @@ out geom;`;
 async function initializeArea(polygon){
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
-    map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#FF0000','fill-opacity':0.1}});
-    map.addLayer({id:'area-line',type:'line',source:'area',paint:{'line-color':'#FF0000','line-width':3}});
+    //map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#FF0000','fill-opacity':0.1}});
+    map.addLayer({id:'area-line',type:'line',source:'area',paint:{'line-color':'#CC0000','line-width':3,
+    'line-opacity': 0.5 }});
   } else map.getSource('area').setData(polygon);
 
   allStreets=await fetchStreets(polygon);
 
   if(!map.getSource('answered-streets')){
     map.addSource('answered-streets',{type:'geojson',data:turf.featureCollection([])});
-    map.addLayer({id:'answered-correct',type:'line',source:'answered-streets',
-      filter:['==',['get','status'],'correct'],
-      layout:{'line-join':'round','line-cap':'round'},
-      paint:{'line-color':'lime','line-width':6}});
-    map.addLayer({id:'answered-wrong',type:'line',source:'answered-streets',
-      filter:['==',['get','status'],'wrong'],
-      layout:{'line-join':'round','line-cap':'round'},
-      paint:{'line-color':'red','line-width':6}});
+// Correct streets
+// Correct streets with halo
+map.addLayer({
+  id: 'answered-correct-halo',
+  type: 'line',
+  source: 'answered-streets',
+  filter: ['==',['get','status'],'correct'],
+  layout: { 'line-join':'round','line-cap':'round' },
+  paint: {
+    'line-color': 'black',
+    'line-width': 6,      // halo width
+    'line-opacity': 0.7
+  }
+});
+map.addLayer({
+  id: 'answered-correct',
+  type: 'line',
+  source: 'answered-streets',
+  filter: ['==',['get','status'],'correct'],
+  layout: { 'line-join':'round','line-cap':'round' },
+  paint: {
+    'line-color': 'lime',
+    'line-width': 4,      // line width
+    'line-opacity': 0.7
+  }
+});
+
+// Wrong streets with halo
+map.addLayer({
+  id: 'answered-wrong-halo',
+  type: 'line',
+  source: 'answered-streets',
+  filter: ['==',['get','status'],'wrong'],
+  layout: { 'line-join':'round','line-cap':'round' },
+  paint: {
+    'line-color': 'black',
+    'line-width': 6,      // halo width
+    'line-opacity': 0.7
+  }
+});
+map.addLayer({
+  id: 'answered-wrong',
+  type: 'line',
+  source: 'answered-streets',
+  filter: ['==',['get','status'],'wrong'],
+  layout: { 'line-join':'round','line-cap':'round' },
+  paint: {
+    'line-color': 'red',
+    'line-width': 4,      // line width
+    'line-opacity': 0.7
+  }
+});
+
+
   }
 
   createLetterButtons();
@@ -630,8 +677,32 @@ function nextRound(){
 
   if(!highlightSourceAdded){
     map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON});
-    map.addLayer({id:highlightLayerId+'-halo',type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'black','line-width':10}});
-    map.addLayer({id:highlightLayerId,type:'line',source:highlightLayerId,layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'white','line-width':6}});
+    // Black halo behind current street
+map.addLayer({
+  id: highlightLayerId+'-halo',
+  type: 'line',
+  source: highlightLayerId,
+  layout: { 'line-join':'round', 'line-cap':'round' },
+  paint: {
+    'line-color': 'black',
+    'line-width': 6,      // halo width
+    'line-opacity': 0.7   // 70% opacity
+  }
+});
+
+// Actual line of current street
+map.addLayer({
+  id: highlightLayerId,
+  type: 'line',
+  source: highlightLayerId,
+  layout: { 'line-join':'round', 'line-cap':'round' },
+  paint: {
+    'line-color': 'white', 
+    'line-width': 4,      // line width
+    'line-opacity': 0.85   // 70% opacity
+  }
+});
+
     highlightSourceAdded=true;
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
