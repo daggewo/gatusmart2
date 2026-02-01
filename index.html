@@ -71,15 +71,25 @@ html, body {
 
 /* Typed prefix row */
 #typed-row {
-  display:flex;
-  align-items:center;
-  gap:4px;
-  padding:0 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px; /* spacing between typed letters and street list */
+  padding: 0 6px;
 }
 
 #prefix-display {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px; /* space for typed letters */
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  border-bottom: 2px solid #fff; /* optional underline */
+  padding: 4px;
+  text-align: center;
 }
+
 
 
 /* Street list container and scrolling */
@@ -114,19 +124,21 @@ html, body {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  color: limegreen;                 /* checkmark color */
+  transform: translate(-50%, -50%) scale(0) translateZ(0); /* force GPU */
+  color: #32CD32;                 /* hex limegreen */
   font-size: 64px;
   font-weight: bold;
   text-shadow: 
     0 0 5px black,
     0 0 10px black,
-    0 0 15px black;                /* black halo around checkmark */
+    0 0 15px black;
+  -webkit-text-stroke: 1px black; /* optional stroke for iOS */
   z-index: 9999;
   pointer-events: none;
   
   animation: pop-check 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
 }
+
 
 @keyframes pop-check {
   0% {
@@ -222,14 +234,15 @@ html, body {
 </div>
 
 <div id="quiz">
-  <div id="bottom-row">
+<div id="bottom-row">
   <div id="typed-row">
     <div id="prefix-display"></div>
-  </div>
-  <div id="street-list-container">
-    <div id="street-list"></div>
+    <div id="street-list-container">
+      <div id="street-list"></div>
+    </div>
   </div>
 </div>
+
 
   <div id="letters"></div>
 </div>
@@ -290,7 +303,7 @@ let currentPrefix = "";
 const keyboardLayout = [
   ['Q','W','E','R','T','Y','U','I','O','P','Å'],
   ['A','S','D','F','G','H','J','K','L','Ö','Ä'],
-  ['⏭','_','Z','X','C','V','B','N','M','_','⌫']
+  ['⏭','💡','Z','X','C','V','B','N','M','_','⌫']
 ];
 
 let score = 0;
@@ -330,6 +343,33 @@ function createLetterButtons() {
       btn.style.cursor = 'pointer';
 
       // PASS
+
+// HINT button
+if(key === '💡') {
+  btn.id = 'hint-btn';
+  btn.textContent = '💡';
+  
+  // Make it visually like other letter buttons
+  btn.style.backgroundColor = '#444'; // same as letters
+  btn.style.color = 'white';
+  btn.style.fontWeight = '600';
+  btn.style.borderRadius = '6px';      // same rounded corners
+  
+  btn.addEventListener('click', () => {
+    if(!currentStreet) return;
+    currentPrefix = currentStreet.name[0]; // show first letter
+    updatePrefix();
+    currentStreet.hinted = true; // mark as hinted
+    btn.disabled = true;         // disable hint button
+    btn.style.opacity = 0.5;
+  });
+  
+  cell.appendChild(btn);
+  rowDiv.appendChild(cell);
+  return;
+}
+
+
 if (key === '⏭') {
   btn.id = 'pass-btn-keyboard';
   btn.classList.add('pass-btn');
@@ -630,85 +670,76 @@ if (!map.getSource('street-label')) {
 }
 
 // Next round
-function nextRound(){
-  currentPrefix="";
-  prefixDisplay.textContent="";
+// ----------------------
+// NEXT ROUND FUNCTION
+// ----------------------
+function nextRound() {
+  currentPrefix = "";
+  prefixDisplay.textContent = "";
 
+  // Reset hint button
+  const hintBtn = document.getElementById('hint-btn');
+  if (hintBtn) {
+    hintBtn.disabled = false;
+    hintBtn.style.opacity = 1;
+  }
 
-  const remainingStreets = allStreets.filter(s=>!usedStreets.has(s.name));
-  if(remainingStreets.length<1){
+  // Pick a remaining street
+  const remainingStreets = allStreets.filter(s => !usedStreets.has(s.name));
+  if (remainingStreets.length < 1) {
     showMessageBox('Game Over', false);
-    setTimeout(resetGame,3000);
+    setTimeout(resetGame, 3000);
     return;
   }
 
-  currentStreet = pickRandom(remainingStreets,1)[0];
+  currentStreet = pickRandom(remainingStreets, 1)[0];
+  currentStreet.hinted = false; // reset hint flag
   currentGeoJSON = turf.featureCollection(
-    currentStreet.geometries.map(geom=>({type:'Feature',geometry:{type:'LineString',coordinates:geom},properties:{}}))
+    currentStreet.geometries.map(geom => ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: geom },
+      properties: {}
+    }))
   );
 
-  const streetCoords=currentGeoJSON.features.flatMap(f=>f.geometry.coordinates);
-  const lats=streetCoords.map(c=>c[1]), lngs=streetCoords.map(c=>c[0]);
-  const streetBounds=[[Math.min(...lngs)-0.001,Math.min(...lats)-0.001],[Math.max(...lngs)+0.001,Math.max(...lats)+0.001]];
-  map.fitBounds(streetBounds,{padding:120,maxZoom:15,duration:1000,essential:true});
+  // Fit map to current street
+  const streetCoords = currentGeoJSON.features.flatMap(f => f.geometry.coordinates);
+  const lats = streetCoords.map(c => c[1]), lngs = streetCoords.map(c => c[0]);
+  const streetBounds = [
+    [Math.min(...lngs) - 0.001, Math.min(...lats) - 0.001],
+    [Math.max(...lngs) + 0.001, Math.max(...lats) + 0.001]
+  ];
+  map.fitBounds(streetBounds, { padding: 120, maxZoom: 15, duration: 1000, essential: true });
 
-  if(!highlightSourceAdded){
-    map.addSource(highlightLayerId,{type:'geojson',data:currentGeoJSON});
+  // Update map highlight layer
+  if (!highlightSourceAdded) {
+    map.addSource(highlightLayerId, { type: 'geojson', data: currentGeoJSON });
     // Black halo behind current street
-map.addLayer({
-  id: highlightLayerId+'-halo',
-  type: 'line',
-  source: highlightLayerId,
-  layout: { 'line-join':'round', 'line-cap':'round' },
-  paint: {
-    'line-color': 'black',
-    'line-width': 6,      // halo width
-    'line-opacity': 0.7   // 70% opacity
+    map.addLayer({
+      id: highlightLayerId + '-halo',
+      type: 'line',
+      source: highlightLayerId,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': 'black', 'line-width': 6, 'line-opacity': 0.7 }
+    });
+    // Actual line of current street
+    map.addLayer({
+      id: highlightLayerId,
+      type: 'line',
+      source: highlightLayerId,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': 'white', 'line-width': 4, 'line-opacity': 0.85 }
+    });
+    highlightSourceAdded = true;
+  } else {
+    map.getSource(highlightLayerId).setData(currentGeoJSON);
   }
-});
-
-// Actual line of current street
-map.addLayer({
-  id: highlightLayerId,
-  type: 'line',
-  source: highlightLayerId,
-  layout: { 'line-join':'round', 'line-cap':'round' },
-  paint: {
-    'line-color': 'white', 
-    'line-width': 4,      // line width
-    'line-opacity': 0.85   // 70% opacity
-  }
-});
-// Ensure street labels are always on top
-if (!map.getLayer('street-label-layer')) {
-  map.addLayer({
-    id: 'street-label-layer',
-    type: 'symbol',
-    source: 'street-label',
-    layout: {
-    'text-offset': [0, -1.2],
-      'text-field': ['get', 'name'],
-      'text-size': 18,
-      'text-font': ['Open Sans Bold'],
-      'text-anchor': 'center',
-      'text-allow-overlap': true
-    },
-    paint: {
-      'text-color': '#ff3333',
-      'text-halo-color': '#000',
-      'text-halo-width': 2
-    }
-  });
-}
-
-
-    highlightSourceAdded=true;
-  } else map.getSource(highlightLayerId).setData(currentGeoJSON);
 
   updateLetterStates();
   updateStreetList();
   updateHUD();
 }
+
 
 function showFloatingCheck() {
   const check = document.createElement('div');
@@ -751,10 +782,10 @@ function showStreetLabelOnMap(streetName, geojson) {
 // Check answer
 
 function checkAnswer(answer) {
-  if (!currentStreet) return;
+  if(!currentStreet) return;
 
   const isPass = answer === '__PASS__';
-  const isCorrect =
+  let isCorrect =
     !isPass &&
     answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
 
@@ -764,26 +795,31 @@ function checkAnswer(answer) {
   currentStreetIndex++;
   updateHUD();
 
-  if (isCorrect) {
-    score++;
-    if (score > record) {
-      record = score;
-      localStorage.setItem('stockholmStreetRecord', record);
+  if(isCorrect) {
+    // Correct but hinted -> no points
+    if(currentStreet.hinted){
+      showFloatingCheck(); // still show checkmark
+      // no score increase
+    } else {
+      score++;
+      if(score > record){
+        record = score;
+        localStorage.setItem('stockholmStreetRecord', record);
+      }
+      showFloatingCheck();
     }
-showFloatingCheck();
     setTimeout(nextRound, NEXT_ROUND_DELAY_CORRECT);
     return;
   }
 
-  // ❌ Wrong or pass
+  // Wrong or pass
   lives--;
   updateHUD();
 
   // Show correct name on map
   showStreetLabelOnMap(currentStreet.name, currentGeoJSON);
 
-  if (lives === 0) {
-    // Small pause to let player see last street
+  if(lives === 0){
     setTimeout(resetGame, NEXT_ROUND_DELAY_WRONG + 400);
     return;
   }
