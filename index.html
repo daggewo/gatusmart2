@@ -58,18 +58,7 @@ html, body {
   background: rgba(0,0,0,0.85);
 }
 
-/* Invisible overlay to block clicks when message box is shown */
-#overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 15;               /* above everything except message box */
-  display: none;             /* hide normally */
-  background: rgba(0,0,0,0); /* fully transparent */
-  cursor: default;           /* normal cursor on overlay */
-}
+
 
 
 /* Bottom row: prefix + street buttons */
@@ -90,25 +79,6 @@ html, body {
 
 #prefix-display {
   display: none;
-}
-
-#message-box .game-over-title {
-  font-size: 32px;    /* bigger than street names */
-  font-weight: bold;
-  display: block;
-  margin-bottom: 8px;
-}
-
-#message-box .wrong-title {
-  font-size: 28px;       /* slightly smaller for wrong answer */
-  font-weight: bold;
-}
-
-#message-box .street-name {
-  font-size: 20px;    /* smaller than game over */
-  font-weight: bold;
-  display: block;
-  color: red;
 }
 
 
@@ -138,6 +108,42 @@ html, body {
   text-align: center;
   cursor: pointer;
 }
+
+
+.floating-check {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  color: limegreen;                 /* checkmark color */
+  font-size: 64px;
+  font-weight: bold;
+  text-shadow: 
+    0 0 5px black,
+    0 0 10px black,
+    0 0 15px black;                /* black halo around checkmark */
+  z-index: 9999;
+  pointer-events: none;
+  
+  animation: pop-check 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes pop-check {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+
+
+
+
 
 /* Keyboard container */
 #letters {
@@ -203,30 +209,12 @@ html, body {
   cursor: not-allowed;
 }
 
-/* Message Box */
-#message-box {
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform: translate(-50%,-50%);
-  min-width:140px;
-  padding:10px 14px;
-  text-align:center;
-  font-size:18px;
-  font-weight:bold;
-  border-radius:8px;
-  z-index:20;
-  display:none;
-}
-#message-box.correct { color:#0f0; background: rgba(0,0,0,0.8); border:3px solid #0f0; }
-#message-box.wrong { color:#f00; background: rgba(0,0,0,0.8); border:3px solid #f00; }
 
 </style>
 </head>
 
 <body>
 <div id="map"></div>
-<div id="overlay"></div>
 <div id="hud">
   <div id="progress">Gata 0 / 0</div>
   <div id="lives">❤️❤️❤️</div>
@@ -245,8 +233,6 @@ html, body {
 
   <div id="letters"></div>
 </div>
-
-<div id="message-box"></div>
 
 <script>
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGFnZ2U5MyIsImEiOiJjbWtyemxiaDIxM3pjM2NxcjhtNml1dW05In0.CLTKS6_OWkFIBgao72y6iQ';
@@ -276,6 +262,10 @@ const progressDiv=document.getElementById('progress');
 const livesDiv=document.getElementById('lives');
 const recordDiv=document.getElementById('record');
 
+const NEXT_ROUND_DELAY_CORRECT = 700;
+const NEXT_ROUND_DELAY_WRONG   = 1800;
+
+
 recordDiv.style.cursor = 'pointer'; // show pointer on hover
 recordDiv.title = 'Click to reset record'; // optional tooltip
 
@@ -287,7 +277,6 @@ recordDiv.addEventListener('click', () => {
   }
 });
 
-const messageBox=document.getElementById('message-box');
 const lettersDiv=document.getElementById('letters');
 const streetListDiv=document.getElementById('street-list');
 const prefixDisplay=document.getElementById('prefix-display');
@@ -442,35 +431,14 @@ s.name.toLowerCase().replace(/ü/g,'u').includes(prefixLower)
 
 
 function updateHUD(){ 
-  progressDiv.textContent = `Gata ${currentStreetIndex+1} / ${allStreets ? allStreets.length : 0}`; 
+  progressDiv.textContent = `Poäng: ${score}`;   // show current score
   livesDiv.textContent = `${'❤️'.repeat(lives)}`; 
   recordDiv.textContent = `Rekord: ${record}`; 
 }
 
 
-function showMessageBox(text, correct = true) {
-  const overlay = document.getElementById('overlay');
 
-  // Show overlay to block other clicks
-  overlay.style.display = 'block';
 
-  messageBox.innerHTML = text.replace(/\n/g, '<br>');
-  messageBox.className = correct ? 'correct' : 'wrong';
-  messageBox.style.display = 'block';
-
-  // Only clicking the message box continues
-  messageBox.onclick = () => {
-    messageBox.style.display = 'none';
-    messageBox.onclick = null;
-    overlay.style.display = 'none'; // hide overlay
-
-    if (lives === 0) {
-      resetGame();   // restart if game over
-    } else {
-      nextRound();   // go to next street
-    }
-  };
-}
 
 
 
@@ -643,6 +611,15 @@ map.addLayer({
     'line-opacity': 0.7
   }
 });
+// Street name label (shown on wrong answer)
+if (!map.getSource('street-label')) {
+  map.addSource('street-label', {
+    type: 'geojson',
+    data: turf.featureCollection([])
+  });
+
+
+}
 
 
   }
@@ -702,6 +679,28 @@ map.addLayer({
     'line-opacity': 0.85   // 70% opacity
   }
 });
+// Ensure street labels are always on top
+if (!map.getLayer('street-label-layer')) {
+  map.addLayer({
+    id: 'street-label-layer',
+    type: 'symbol',
+    source: 'street-label',
+    layout: {
+    'text-offset': [0, -1.2],
+      'text-field': ['get', 'name'],
+      'text-size': 18,
+      'text-font': ['Open Sans Bold'],
+      'text-anchor': 'center',
+      'text-allow-overlap': true
+    },
+    paint: {
+      'text-color': '#ff3333',
+      'text-halo-color': '#000',
+      'text-halo-width': 2
+    }
+  });
+}
+
 
     highlightSourceAdded=true;
   } else map.getSource(highlightLayerId).setData(currentGeoJSON);
@@ -711,15 +710,42 @@ map.addLayer({
   updateHUD();
 }
 
-function showTemporaryStreetName(name) {
-  messageBox.innerHTML = `<span class="street-name">${name}</span>`;
-  messageBox.className = 'wrong';  // red style
-  messageBox.style.display = 'block';
+function showFloatingCheck() {
+  const check = document.createElement('div');
+  check.className = 'floating-check';
+  check.textContent = '✔';
+  document.body.appendChild(check);
 
-  setTimeout(() => {
-    messageBox.style.display = 'none';
-  }, 1500); // hide after 1.5 seconds
+  // Remove after animation completes
+  setTimeout(() => check.remove(), 500); // matches animation duration
 }
+
+
+
+function showStreetLabelOnMap(streetName, geojson) {
+  const center = turf.centerOfMass({
+    type: 'Feature',
+    geometry: geojson.features[0].geometry
+  });
+
+  map.getSource('street-label').setData(
+    turf.featureCollection([{
+      type: 'Feature',
+      geometry: center.geometry,
+      properties: {
+        name: streetName
+      }
+    }])
+  );
+
+  // Remove label after 1.8 seconds
+  setTimeout(() => {
+    map.getSource('street-label').setData(
+      turf.featureCollection([])
+    );
+  }, 1800);
+}
+
 
 
 // Check answer
@@ -728,45 +754,43 @@ function checkAnswer(answer) {
   if (!currentStreet) return;
 
   const isPass = answer === '__PASS__';
-  const isCorrect = !isPass && answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
+  const isCorrect =
+    !isPass &&
+    answer.trim().toLowerCase() === currentStreet.name.toLowerCase();
 
-  // Highlight the street
+  // Highlight street
   highlightStreet(currentGeoJSON, isCorrect ? 'correct' : 'wrong');
-
   usedStreets.add(currentStreet.name);
-
-  // Always increment progress
   currentStreetIndex++;
   updateHUD();
 
   if (isCorrect) {
-    // Only update record on correct answers
-score++;
-
-if (score > record) {
-  record = score;
-  localStorage.setItem('stockholmStreetRecord', record);
-}
-    localStorage.setItem('stockholmStreetRecord', record);
-    showMessageBox('Rätt!', true);
+    score++;
+    if (score > record) {
+      record = score;
+      localStorage.setItem('stockholmStreetRecord', record);
+    }
+showFloatingCheck();
+    setTimeout(nextRound, NEXT_ROUND_DELAY_CORRECT);
     return;
   }
 
-  // Wrong guess or pass reduces lives
+  // ❌ Wrong or pass
   lives--;
   updateHUD();
 
+  // Show correct name on map
+  showStreetLabelOnMap(currentStreet.name, currentGeoJSON);
+
   if (lives === 0) {
-    showMessageBox(`
-      <span class="game-over-title">Game Over</span>
-      <span class="street-name">${currentStreet.name}</span>
-    `, false);
+    // Small pause to let player see last street
+    setTimeout(resetGame, NEXT_ROUND_DELAY_WRONG + 400);
     return;
   }
 
-  // Wrong guess or pass: show the street name
-  showMessageBox(`<span class="street-name">${currentStreet.name}</span>`, false);
+  setTimeout(nextRound, NEXT_ROUND_DELAY_WRONG);
 }
+
 
 
 
