@@ -81,11 +81,10 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 80px; /* space for typed letters */
+  min-width: 50px; /* space for typed letters */
   font-size: 16px;
   font-weight: bold;
   color: white;
-  border-bottom: 2px solid #fff; /* optional underline */
   padding: 4px;
   text-align: center;
 }
@@ -563,16 +562,35 @@ out geom;`;
     return [];
   }
 
-  // 4️⃣ Process streets
-  const streetsByName = {};
-  dataOSM.elements.filter(el=>el.tags && el.tags.name).forEach(el=>{
-    const geom = el.geometry.map(pt=>[pt.lon, pt.lat]);
+// 4️⃣ Process streets (group by name)
+const streetsByName = {};
+
+dataOSM.elements
+  .filter(el => el.tags && el.tags.name)
+  .forEach(el => {
+    const geom = el.geometry.map(pt => [pt.lon, pt.lat]);
     if (!turf.booleanWithin({type:'LineString', coordinates:geom}, polygon)) return;
-    streetsByName[el.tags.name] ??= [];
-    streetsByName[el.tags.name].push(geom);
+
+    const name = el.tags.name;
+    if (!streetsByName[name]) {
+      streetsByName[name] = {
+        name: name,
+        highway: el.tags.highway || '',
+        surface: el.tags.surface || '',
+        ref: el.tags.ref || '',
+        oneway: el.tags.oneway || '',
+        lanes: el.tags.lanes || '',
+        maxspeed: el.tags.maxspeed || '',
+        geometries: []
+      };
+    }
+    streetsByName[name].geometries.push(geom);
   });
 
-  const streets = Object.keys(streetsByName).map(name => ({name, geometries: streetsByName[name]}));
+const streets = Object.values(streetsByName);
+
+
+
 
   // 5️⃣ Save to local cache
   try {
@@ -582,11 +600,26 @@ out geom;`;
     console.warn('Could not cache streets locally: ', e.message);
   }
 
+// Create a text dump with street name and type (highway)
+const sheetDump = streets
+  .sort((a,b) => a.name.localeCompare(b.name, 'sv'))
+  .map(s => `${s.name}\t${s.highway}\t${s.surface}\t${s.ref}\t${s.oneway}\t${s.lanes}\t${s.maxspeed}`)
+  .join('\n');
+
+console.log(sheetDump);
+navigator.clipboard.writeText(sheetDump)
+  .then(() => console.log('Street list copied to clipboard ✅'))
+  .catch(err => console.warn('Clipboard copy failed', err));
+
+
+
   return streets;
 }
 
 
 // Initialize area and game
+console.log('initializeArea called');
+
 async function initializeArea(polygon){
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
@@ -596,6 +629,34 @@ async function initializeArea(polygon){
   } else map.getSource('area').setData(polygon);
 
   allStreets=await fetchStreets(polygon);
+
+// List of street names you want to remove
+const blockedStreets = [
+  "Strand",
+  "Ambulanshall SÖS",
+  "Hornsgatsavfarten",
+  "Hornsgatspåfarten",
+  "Söderledstunneln",
+  "Katarinahissen",
+  "Mosebacke terrass",
+  "Noe Arksfaret",
+  "Söder Mälarstrandskajen",
+  "Södermalmsavfarten",
+  "Stadsgårdshamnen",
+  "Stadsmuseets gård",
+  "Fatbursfaret",
+
+
+];
+
+// Filter them out
+allStreets = allStreets.filter(s => !blockedStreets.includes(s.name));
+
+console.log(`Removed blocked streets. Remaining streets: ${allStreets.length}`);
+
+
+console.log('Fetched streets:', allStreets?.length);
+window.allStreets = allStreets;
 
   if(!map.getSource('answered-streets')){
     map.addSource('answered-streets',{type:'geojson',data:turf.featureCollection([])});
