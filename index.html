@@ -123,33 +123,39 @@ html, body {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(0) translateZ(0); /* force GPU */
-  color: #32CD32;                 /* hex limegreen */
+  transform: translate(-50%, -50%) scale(0);
   font-size: 64px;
   font-weight: bold;
+  color: #32CD32;                 /* fallback for non-Safari */
+  -webkit-text-fill-color: #32CD32; /* iOS Safari fix */
+  -webkit-text-stroke: 1px black;   /* black outline for visibility */
   text-shadow: 
     0 0 5px black,
     0 0 10px black,
     0 0 15px black;
-  -webkit-text-stroke: 1px black; /* optional stroke for iOS */
   z-index: 9999;
   pointer-events: none;
-  
   animation: pop-check 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  will-change: transform, opacity;  /* hint to GPU for smoother animation */
 }
+
 
 
 @keyframes pop-check {
   0% {
     transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
   }
   60% {
     transform: translate(-50%, -50%) scale(1.4);
+    opacity: 1;
   }
   100% {
     transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
   }
 }
+
 
 
 
@@ -600,16 +606,6 @@ const streets = Object.values(streetsByName);
     console.warn('Could not cache streets locally: ', e.message);
   }
 
-// Create a text dump with street name and type (highway)
-const sheetDump = streets
-  .sort((a,b) => a.name.localeCompare(b.name, 'sv'))
-  .map(s => `${s.name}\t${s.highway}\t${s.surface}\t${s.ref}\t${s.oneway}\t${s.lanes}\t${s.maxspeed}`)
-  .join('\n');
-
-console.log(sheetDump);
-navigator.clipboard.writeText(sheetDump)
-  .then(() => console.log('Street list copied to clipboard ✅'))
-  .catch(err => console.warn('Clipboard copy failed', err));
 
 
 
@@ -617,10 +613,10 @@ navigator.clipboard.writeText(sheetDump)
 }
 
 
-// Initialize area and game
-console.log('initializeArea called');
-
 async function initializeArea(polygon){
+
+
+
   if(!map.getSource('area')){
     map.addSource('area',{type:'geojson',data:polygon});
     //map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#FF0000','fill-opacity':0.1}});
@@ -651,17 +647,38 @@ const blockedStreets = [
 
 // Filter them out
 allStreets = allStreets.filter(s => !blockedStreets.includes(s.name));
-
-console.log(`Removed blocked streets. Remaining streets: ${allStreets.length}`);
-
-
-console.log('Fetched streets:', allStreets?.length);
 window.allStreets = allStreets;
 
   if(!map.getSource('answered-streets')){
     map.addSource('answered-streets',{type:'geojson',data:turf.featureCollection([])});
 // Correct streets
 // Correct streets with halo
+
+if (!map.getSource('street-label')) {
+  map.addSource('street-label', {
+    type: 'geojson',
+    data: turf.featureCollection([])
+  });
+
+  // Add a symbol layer to display street names
+  map.addLayer({
+    id: 'street-label-layer',
+    type: 'symbol',
+    source: 'street-label',
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-size': 14,
+      'text-offset': [0, 0.5],
+      'text-anchor': 'top'
+    },
+    paint: {
+      'text-color': 'red',
+      'text-halo-color': 'black',
+      'text-halo-width': 2
+    }
+  });
+
 map.addLayer({
   id: 'answered-correct-halo',
   type: 'line',
@@ -713,14 +730,13 @@ map.addLayer({
   }
 });
 // Street name label (shown on wrong answer)
-if (!map.getSource('street-label')) {
-  map.addSource('street-label', {
-    type: 'geojson',
-    data: turf.featureCollection([])
-  });
+
+
 
 
 }
+
+
 
 
   }
@@ -815,28 +831,38 @@ function showFloatingCheck() {
 
 
 function showStreetLabelOnMap(streetName, geojson) {
-  const center = turf.centerOfMass({
-    type: 'Feature',
-    geometry: geojson.features[0].geometry
-  });
+  if (!geojson.features || geojson.features.length === 0) return;
 
+  // Pick the first LineString (or you could pick the longest)
+  const line = geojson.features[0].geometry;
+
+  // Place the label halfway along the street
+  const lineLength = turf.length(line, { units: 'kilometers' });
+  const midPoint = turf.along(line, lineLength / 2, { units: 'kilometers' });
+
+  // Update the street-label source with the new point
   map.getSource('street-label').setData(
     turf.featureCollection([{
       type: 'Feature',
-      geometry: center.geometry,
-      properties: {
-        name: streetName
-      }
+      geometry: midPoint.geometry,
+      properties: { name: streetName }
     }])
   );
 
-  // Remove label after 1.8 seconds
+  // Optional: bring label layer on top of highlight layer
+  // This ensures it’s not hidden below
+  if (map.getLayer('street-label-layer')) {
+    map.moveLayer('street-label-layer'); // moves it to top of all layers
+  }
+
+  // Remove the label after 1.8 seconds
   setTimeout(() => {
     map.getSource('street-label').setData(
       turf.featureCollection([])
     );
   }, 1800);
 }
+
 
 
 
