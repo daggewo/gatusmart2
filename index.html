@@ -434,9 +434,12 @@ function updateLetterStates(){
     const possible = allStreets && allStreets.some(s => {
       if(usedStreets.has(s.name)) return false;
 const normalizedStreet = s.name.toLowerCase();
-const combined = normalizedStreet.replace(/ü/g, 'u'); // treat ü as u
+const combined = normalizedStreet
+  .replace(/ü/g, 'u')
+  .replace(/\s+/g, ' ');
 
-return combined.includes(prefix + letter);    });
+
+return combined.startsWith(prefix + letter);    });
 
     if(possible) btn.classList.remove('disabled');
     else btn.classList.add('disabled');
@@ -453,7 +456,7 @@ function updateStreetList(){
   const filtered = allStreets
     .filter(s => 
       !usedStreets.has(s.name) &&
-s.name.toLowerCase().replace(/ü/g,'u').includes(prefixLower)
+s.name.toLowerCase().replace(/ü/g,'u').startsWith(prefixLower)
     )
     .sort((a,b) => a.name.localeCompare(b.name));
 
@@ -468,15 +471,16 @@ s.name.toLowerCase().replace(/ü/g,'u').includes(prefixLower)
 
 
 function updateHUD(){ 
-  progressDiv.textContent = `Poäng: ${score}`;   // show current score
+  const total = allStreets ? allStreets.length : 0;
+  progressDiv.innerHTML = `
+    Poäng: ${score}<br>
+    <span style="font-size:12px;font-weight:normal">
+      max ${total} 
+    </span>
+  `;
   livesDiv.textContent = `${'❤️'.repeat(lives)}`; 
   recordDiv.textContent = `Rekord: ${record}`; 
 }
-
-
-
-
-
 
 
 
@@ -633,6 +637,29 @@ const blockedStreets = [
   "Stadsgårdshamnen",
   "Stadsmuseets gård",
   "Fatbursfaret",
+  "Långholmsbron",
+  "Guldfjärdsplan",
+  "Liljeholmsbron",
+  "Skanstullsbron",
+  "Södra Järngraven",
+  "Skansbrogatan",
+  "Skansbron",
+  "Slussbrogatan",
+  "Skansbrogatan",
+  "Adas Trappor",
+  "Banbrinken",
+  "Bergsprängargränd",
+  "Högalidsspången",
+  "Katarina Gångbro",
+  "Metartorget",
+  "Tjärhovsplan",
+  "Färgarplan",
+  "Fritz Gustafs Trappor",
+  "Fatburstrappan",
+  "Folkungatrappan",
+  "Sofia Trappgränd",
+  "Maria Trappgränd",
+  "Tegelviksslingan",
 
 
 ];
